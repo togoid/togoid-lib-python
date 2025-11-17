@@ -361,6 +361,20 @@ togoid --api-url http://localhost:5000 convert --ids 1,9 --route ncbigene,ensemb
 - requests >= 2.20.0
 - pandas >= 1.0.0 (optional, for DataFrame format)
 
+## Testing
+
+This package includes comprehensive test scripts to verify all functionality:
+
+```bash
+# Test Python library examples
+python3 test_readme_examples.py
+
+# Test CLI examples
+bash test_cli_examples.sh
+```
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
 ## License
 
 MIT License
