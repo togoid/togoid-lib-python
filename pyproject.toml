@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "togoid"
+version = "1.0.0"
+description = "Python library and CLI for biological database ID conversion and annotation"
+readme = "README.md"
+authors = [
+    {name = "DBCLS", email = "noreply@dbcls.jp"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+keywords = ["bioinformatics", "database", "id-conversion", "togoid"]
+requires-python = ">=3.7"
+dependencies = [
+    "requests>=2.20.0",
+]
+
+[project.optional-dependencies]
+pandas = ["pandas>=1.0.0"]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+]
+
+[project.urls]
+Homepage = "https://togoid.dbcls.jp"
+Documentation = "https://github.com/togoid/togoid-lib-python"
+Repository = "https://github.com/togoid/togoid-lib-python"
+"Bug Reports" = "https://github.com/togoid/togoid-lib-python/issues"
+
+[project.scripts]
+togoid = "togoid.cli:main"
+
+[tool.setuptools]
+packages = ["togoid"]
+
+[tool.setuptools.package-data]
+togoid = ["py.typed"]
