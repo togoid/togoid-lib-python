@@ -12,6 +12,7 @@ from typing import Optional, List
 
 from .converter import TogoIDConverter
 from .annotations import AnnotationsConverter, parse_filters, load_ids, ensure_fields, output_table, output_json
+from .label_converter import LabelConverter, parse_labels, output_results
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -24,6 +25,9 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   # Convert IDs
   togoid convert --ids 1,9 --route ncbigene,ensembl_gene
+
+  # Convert labels to IDs
+  togoid label2id --labels "BRCA1,TP53" --taxon 9606
 
   # Get annotations
   togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym
@@ -49,6 +53,30 @@ Examples:
     convert_parser.add_argument('--limit', type=int, help='Limit number of results')
     convert_parser.add_argument('--offset', type=int, help='Offset for results')
     convert_parser.add_argument('--output', help='Output file path')
+
+    # ========== LABEL2ID subcommand ==========
+    label2id_parser = subparsers.add_parser('label2id', help='Convert labels to IDs')
+    label_input = label2id_parser.add_mutually_exclusive_group(required=True)
+    label_input.add_argument('--labels', help='Comma-separated labels')
+    label_input.add_argument('--label-file', help='File containing labels (one per line or comma-separated)')
+
+    # SPARQList options (for gene symbols)
+    label2id_parser.add_argument('--label-types', default='symbol,synonym',
+                                 help='Label types for SPARQList (default: symbol,synonym)')
+    label2id_parser.add_argument('--taxon', help='Taxonomy ID for SPARQList (e.g., 9606 for human)')
+
+    # PubDictionaries options (for other labels)
+    label2id_parser.add_argument('--dictionaries', help='Dictionary names for PubDictionaries (comma-separated)')
+    label2id_parser.add_argument('--tags', help='Taxonomy tags for PubDictionaries (e.g., 9606)')
+    label2id_parser.add_argument('--threshold', type=float, default=0.5,
+                                 help='Matching score threshold for PubDictionaries (0-1, default: 0.5)')
+    label2id_parser.add_argument('--preferred-dictionary', help='Preferred dictionary for synonym resolution')
+
+    # Output options
+    label2id_parser.add_argument('--format', choices=['json', 'csv', 'tsv'], default='json',
+                                 help='Output format (default: json)')
+    label2id_parser.add_argument('--output', help='Output file path')
+    label2id_parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
 
     # ========== ANNOTATE subcommand ==========
     annotate_parser = subparsers.add_parser('annotate', help='Get annotations for IDs')
@@ -148,6 +176,38 @@ def handle_convert(args, converter: TogoIDConverter):
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
+def handle_label2id(args):
+    """Handle label2id command"""
+    # Parse labels
+    if args.labels:
+        labels = parse_labels(args.labels)
+    else:
+        with open(args.label_file, 'r', encoding='utf-8') as f:
+            labels = parse_labels(f.read())
+
+    # Create converter
+    converter = LabelConverter(verbose=args.verbose)
+
+    # Convert labels to IDs
+    try:
+        results = converter.convert(
+            labels=labels,
+            dictionaries=args.dictionaries,
+            tags=args.tags,
+            threshold=args.threshold,
+            preferred_dictionary=args.preferred_dictionary,
+            label_types=args.label_types,
+            taxon=args.taxon,
+        )
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Output results
+    output_results(results, args.format, args.output)
+    return 0
+
+
 def handle_annotate(args, api_url: str):
     """Handle annotate command"""
     grasp_endpoint = args.graphql_endpoint or os.environ.get(
@@ -245,6 +305,9 @@ def main():
         if args.command == 'convert':
             converter = TogoIDConverter(api_base_url=api_url)
             handle_convert(args, converter)
+
+        elif args.command == 'label2id':
+            return handle_label2id(args)
 
         elif args.command == 'annotate':
             return handle_annotate(args, api_url)

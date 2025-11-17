@@ -5,6 +5,7 @@ Python library and CLI tool for biological database ID conversion and annotation
 ## Features
 
 - **ID Conversion**: Convert IDs between biological databases
+- **Label to ID**: Convert biological labels (gene names, etc.) to database IDs with automatic API detection
 - **Annotations**: Get labels and annotations for database IDs
 - **Multiple Formats**: Support for JSON, CSV, TSV, dict, table, and pandas DataFrame
 - **Dual Interface**: Use as Python library or command-line tool
@@ -27,7 +28,7 @@ pip install -e ".[pandas]"
 ### As a Python Library
 
 ```python
-from togoid import TogoIDConverter, AnnotationsConverter
+from togoid import TogoIDConverter, AnnotationsConverter, LabelConverter
 
 # ID Conversion
 converter = TogoIDConverter()
@@ -45,6 +46,21 @@ result_table = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gen
 
 # DataFrame format (requires pandas)
 result_df = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dataframe")
+
+# Label to ID Conversion (automatic API detection)
+label_converter = LabelConverter()
+
+# Gene symbols → automatically uses SPARQList API for ncbigene
+results = label_converter.convert(
+    labels=["BRCA1", "TP53"],
+    taxon="9606"  # Human
+)
+
+# Other labels → automatically uses PubDictionaries API
+results = label_converter.convert(
+    labels=["breast cancer"],
+    dictionaries="togoid_mondo_label"
+)
 
 # Get Annotations
 annotator = AnnotationsConverter()
@@ -64,6 +80,9 @@ python -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
 # or using the togoid command (after installation)
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
+
+# Convert labels to IDs (automatic API detection)
+togoid label2id --labels "BRCA1,TP53,EGFR" --taxon 9606
 
 # Get annotations
 togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym --field full_name
@@ -133,6 +152,42 @@ routes = converter.route(src="ncbigene", dst="uniprot", max_hops=3)
 tables = converter.lookup_id("672")
 ```
 
+### Label to ID Conversion
+
+```python
+from togoid import LabelConverter
+
+converter = LabelConverter(verbose=True)
+
+# Automatic API detection - gene symbols use SPARQList
+results = converter.convert(
+    labels=["BRCA1", "TP53", "EGFR"],
+    taxon="9606"  # Human
+)
+# Returns: [{"input": "BRCA1", "match_type": "symbol", "symbol": "BRCA1", "identifier": "672"}, ...]
+
+# Automatic API detection - numeric IDs or other labels use PubDictionaries
+results = converter.convert(
+    labels=["breast cancer"],
+    dictionaries="togoid_mondo_label"
+)
+
+# Manual PubDictionaries API usage
+results = converter.convert_pubdictionaries(
+    labels=["diabetes"],
+    dictionaries="togoid_mondo_label",
+    threshold=0.5
+)
+
+# Manual SPARQList API usage
+results = converter.convert_sparqlist(
+    labels=["BRCA1", "TP53"],
+    sparqlist="label2id_ncbigene",
+    label_types="symbol,synonym",
+    taxon="9606"
+)
+```
+
 ### Annotations
 
 ```python
@@ -173,6 +228,26 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format csv --output res
 
 # With additional parameters
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
+```
+
+### Label2ID Command
+
+```bash
+# Basic conversion (automatic API detection)
+togoid label2id --labels "BRCA1,TP53,EGFR" --taxon 9606
+
+# From file
+echo -e "BRCA1\nTP53\nEGFR" > genes.txt
+togoid label2id --label-file genes.txt --taxon 9606
+
+# CSV output
+togoid label2id --labels "BRCA1,TP53" --taxon 9606 --format csv --output results.csv
+
+# With PubDictionaries (for non-gene labels)
+togoid label2id --labels "breast cancer" --dictionaries "togoid_mondo_label"
+
+# Verbose mode
+togoid label2id --labels "BRCA1,TP53" --taxon 9606 --verbose
 ```
 
 ### Annotate Command
@@ -239,6 +314,20 @@ Main class for ID conversion operations.
 - `config_descriptions()` - Get database descriptions
 - `config_statistics()` - Get database statistics
 - `config_taxonomy()` - Get taxonomy list
+
+### LabelConverter
+
+Main class for converting biological labels to database IDs with automatic API detection.
+
+**Methods:**
+- `convert(labels, dictionaries=None, tags=None, threshold=0.5, preferred_dictionary=None, label_types='symbol,synonym', taxon=None)` - Convert labels to IDs (auto-detects API)
+- `convert_pubdictionaries(labels, dictionaries, tags=None, threshold=0.5, preferred_dictionary=None)` - Convert using PubDictionaries API
+- `convert_sparqlist(labels, sparqlist, label_types, taxon=None)` - Convert using SPARQList API
+
+**Auto-detection Logic:**
+- If labels are gene symbols (non-numeric) → Uses SPARQList API for ncbigene
+- If labels are numeric IDs or other formats → Uses PubDictionaries API
+- ncbigene regex pattern is fetched from TogoID API dynamically
 
 ### AnnotationsConverter
 
