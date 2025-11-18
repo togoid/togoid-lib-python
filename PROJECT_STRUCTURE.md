@@ -58,6 +58,25 @@ togoid-lib-python/
 
 ## Installation
 
+### Using uv (recommended)
+
+```bash
+# Create virtual environment
+uv venv
+source .venv/bin/activate
+
+# Install in development mode
+uv pip install -e .
+
+# With pandas support
+uv pip install -e ".[pandas]"
+
+# With development tools
+uv pip install -e ".[dev]"
+```
+
+### Using pip
+
 ```bash
 # Install in development mode
 pip install -e .

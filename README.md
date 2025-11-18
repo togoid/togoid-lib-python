@@ -13,6 +13,36 @@ Python library and CLI tool for biological database ID conversion and annotation
 
 ## Installation
 
+### Using uv (recommended - faster)
+
+[uv](https://github.com/astral-sh/uv) is a blazingly fast Python package installer and resolver (10-100x faster than pip).
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and setup
+git clone https://github.com/togoid/togoid-lib-python.git
+cd togoid-lib-python
+
+# Create virtual environment and install
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install the package
+uv pip install -e .
+
+# With pandas support
+uv pip install -e ".[pandas]"
+
+# With development tools
+uv pip install -e ".[dev]"
+```
+
+**💡 Tip:** See [QUICKSTART_UV.md](QUICKSTART_UV.md) for a detailed uv quick start guide.
+
+### Using pip (traditional)
+
 ```bash
 # From source
 git clone https://github.com/togoid/togoid-lib-python.git
