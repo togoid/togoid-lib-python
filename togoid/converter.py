@@ -6,7 +6,7 @@ This module provides ID conversion between biological databases using TogoID API
 
 import json
 import sys
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 import requests
 
@@ -67,7 +67,116 @@ class TogoIDConverter:
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"API Error: {e}") from e
 
-    def convert(self, route: List[str], ids: List[str], format: str = 'json', **kwargs) -> Any:
+    def _add_annotations(
+        self,
+        response: Any,
+        route: List[str],
+        annotate: List[Tuple[str, str]]
+    ) -> Dict[str, Any]:
+        """
+        Add annotations to conversion results
+
+        Args:
+            response: API response from convert endpoint
+            route: Conversion route
+            annotate: List of (dataset_name, field_name) tuples
+
+        Returns:
+            Modified response with annotations added
+        """
+        # Import AnnotationsConverter here to avoid circular dependency
+        from .annotations import AnnotationsConverter
+
+        # Extract the results array from the response
+        if isinstance(response, dict) and 'results' in response:
+            table_data = response['results']
+        else:
+            # Fallback to table conversion
+            table_data = self._convert_to_table(response)
+
+        if not table_data:
+            return response
+
+        # Initialize annotations converter
+        ann_converter = AnnotationsConverter(api_endpoint=self.api_base_url)
+
+        # Build a mapping of dataset -> {id -> {field -> value}}
+        annotations_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+        for dataset_name, field_name in annotate:
+            if dataset_name not in route:
+                raise ValueError(
+                    f"Dataset '{dataset_name}' not found in route {route}"
+                )
+
+            # Collect all IDs for this dataset
+            dataset_index = route.index(dataset_name)
+            ids_to_annotate = set()
+
+            for row in table_data:
+                if isinstance(row, list) and len(row) > dataset_index:
+                    ids_to_annotate.add(str(row[dataset_index]))
+
+            if not ids_to_annotate:
+                continue
+
+            # Execute annotation query
+            try:
+                records = ann_converter.execute_query(
+                    dataset_name=dataset_name,
+                    ids=list(ids_to_annotate),
+                    fields=[field_name],
+                    filters={}
+                )
+
+                # Cache the results
+                if dataset_name not in annotations_cache:
+                    annotations_cache[dataset_name] = {}
+
+                for id_value, fields_data in records.items():
+                    if id_value not in annotations_cache[dataset_name]:
+                        annotations_cache[dataset_name][id_value] = {}
+                    annotations_cache[dataset_name][id_value][field_name] = fields_data.get(field_name, "")
+
+            except Exception as e:
+                # Log error but continue
+                print(f"Warning: Failed to get annotations for {dataset_name}.{field_name}: {e}", file=sys.stderr)
+
+        # Add annotation columns to table data
+        annotated_table = []
+        for row in table_data:
+            if isinstance(row, list):
+                new_row = list(row)
+                for dataset_name, field_name in annotate:
+                    dataset_index = route.index(dataset_name)
+                    if len(row) > dataset_index:
+                        id_value = str(row[dataset_index])
+                        annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
+                        # Handle list values
+                        if isinstance(annotation_value, list):
+                            annotation_value = ", ".join(str(v) for v in annotation_value)
+                        new_row.append(str(annotation_value))
+                    else:
+                        new_row.append("")
+                annotated_table.append(new_row)
+            else:
+                annotated_table.append(row)
+
+        # Update response with annotated results
+        if isinstance(response, dict) and 'results' in response:
+            response['results'] = annotated_table
+            return response
+        else:
+            return annotated_table
+
+    def convert(
+        self,
+        route: List[str],
+        ids: List[str],
+        format: str = 'json',
+        annotate: Optional[List[Tuple[str, str]]] = None,
+        **kwargs
+    ) -> Any:
         """
         Convert IDs between databases
 
@@ -75,14 +184,15 @@ class TogoIDConverter:
             route: List of database names forming the conversion route
             ids: List of IDs to convert
             format: Output format - 'json' (default), 'dict', 'table', or 'dataframe'
+            annotate: Optional list of (dataset_name, field_name) tuples to add annotations
             **kwargs: Additional parameters (report, limit, offset, etc.)
 
         Returns:
             Conversion results in the specified format:
             - 'json': Raw API response (default)
             - 'dict': Dictionary mapping source IDs to target IDs
-            - 'table': 2D array (list of lists) with [source_id, target_id] pairs
-            - 'dataframe': pandas DataFrame with 'source_id' and 'target_id' columns
+            - 'table': 2D array (list of lists) with [source_id, target_id] pairs (with annotations if specified)
+            - 'dataframe': pandas DataFrame with 'source_id' and 'target_id' columns (with annotations if specified)
         """
         params = {
             'route': ','.join(route),
@@ -90,8 +200,16 @@ class TogoIDConverter:
         }
         params.update(kwargs)
 
+        # If annotations requested, ensure we get full report format
+        if annotate and 'report' not in params:
+            params['report'] = 'full'
+
         # Get API response
         response = self._make_request('/convert', 'GET', params=params)
+
+        # If annotations requested, add them to the response
+        if annotate and format in ('table', 'dataframe'):
+            response = self._add_annotations(response, route, annotate)
 
         # Transform based on format
         if format == 'dict':
@@ -142,15 +260,30 @@ class TogoIDConverter:
             response: API response (can be list or dict)
 
         Returns:
-            2D array with [source_id, target_id] pairs
+            2D array with [source_id, target_id, ...] rows
         """
         result = []
 
+        # Handle TogoID API response format with 'results' key
+        if isinstance(response, dict) and 'results' in response:
+            results_data = response['results']
+            if isinstance(results_data, list):
+                for item in results_data:
+                    if isinstance(item, list):
+                        # Already a list, convert all elements to strings
+                        result.append([str(elem) for elem in item])
+                    else:
+                        # Single value
+                        result.append([str(item)])
+            return result
+
+        # Handle simple list format
         if isinstance(response, list):
-            # Handle list format (e.g., [[source, target], ...])
+            # Handle list format (e.g., [[source, target], ...] or [[source, target, annotation], ...])
             for item in response:
-                if isinstance(item, list) and len(item) >= 2:
-                    result.append([str(item[0]), str(item[1])])
+                if isinstance(item, list):
+                    # Convert all elements to strings
+                    result.append([str(elem) for elem in item])
                 elif isinstance(item, dict):
                     # Handle dict items within list
                     for key, value in item.items():
@@ -160,7 +293,7 @@ class TogoIDConverter:
                         else:
                             result.append([str(key), str(value)])
         elif isinstance(response, dict):
-            # Handle dictionary format
+            # Handle dictionary format (not TogoID API format)
             for source_id, targets in response.items():
                 if isinstance(targets, list):
                     for target_id in targets:
