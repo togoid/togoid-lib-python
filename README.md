@@ -5,7 +5,9 @@ Python library and CLI tool for biological database ID conversion and annotation
 ## Features
 
 - **ID Conversion**: Convert IDs between biological databases
-- **Label to ID**: Convert biological labels (gene names, etc.) to database IDs with automatic API detection
+- **ID Conversion with Annotations**: Add annotation columns during conversion
+- **ID Conversion with Filtering**: Filter conversion results by annotation values
+- **Label to ID**: Convert biological labels (gene names, etc.) to database IDs with dataset-based API selection
 - **Annotations**: Get labels and annotations for database IDs
 - **Multiple Formats**: Support for JSON, CSV, TSV, dict, table, and pandas DataFrame
 - **Dual Interface**: Use as Python library or command-line tool
@@ -77,19 +79,38 @@ result_table = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gen
 # DataFrame format (requires pandas)
 result_df = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dataframe")
 
-# Label to ID Conversion (automatic API detection)
-label_converter = LabelConverter()
-
-# Gene symbols → automatically uses SPARQList API for ncbigene
-results = label_converter.convert(
-    labels=["BRCA1", "TP53"],
-    taxon="9606"  # Human
+# ID Conversion with Annotations
+result_with_annotations = converter.convert(
+    ids=["1", "9"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="table",
+    annotate=[("ncbigene", "label")]  # Add ncbigene label as annotation column
 )
 
-# Other labels → automatically uses PubDictionaries API
+# ID Conversion with Filtering
+result_filtered = converter.convert(
+    ids=["1", "9"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="table",
+    annotate=[("ncbigene", "label")],
+    filter=[("ensembl_transcript", "transcript_flag", ["MANE Select"])]  # Only MANE Select transcripts
+)
+
+# Label to ID Conversion
+label_converter = LabelConverter()
+
+# Convert labels with dataset specification
 results = label_converter.convert(
-    labels=["breast cancer"],
-    dictionaries="togoid_mondo_label"
+    labels=["BRCA1", "TP53"],
+    dataset="ncbigene",
+    taxonomy="9606"  # Human
+)
+
+# Convert labels for other datasets
+results = label_converter.convert(
+    labels=["caffeine"],
+    dataset="chebi",
+    label_types="togoid_chebi_label"
 )
 
 # Get Annotations
@@ -111,8 +132,8 @@ python -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 # or using the togoid command (after installation)
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
 
-# Convert labels to IDs (automatic API detection)
-togoid label2id --labels "BRCA1,TP53,EGFR" --taxon 9606
+# Convert labels to IDs
+togoid label2id --labels "BRCA1,TP53,EGFR" --dataset ncbigene --taxonomy 9606
 
 # Get annotations
 togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym --field full_name
@@ -169,6 +190,40 @@ df_result = converter.convert(
 )
 ```
 
+#### ID Conversion with Annotations
+
+```python
+# Add annotation columns to conversion results
+result = converter.convert(
+    ids=["1", "9"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="table",
+    annotate=[
+        ("ncbigene", "label"),           # Add gene label from ncbigene
+        ("ncbigene", "full_name"),       # Add full gene name from ncbigene
+        ("ensembl_gene", "label")        # Add gene label from ensembl_gene
+    ]
+)
+# Result includes original conversion + 3 annotation columns
+```
+
+#### ID Conversion with Filtering
+
+```python
+# Filter conversion results by annotation values
+result = converter.convert(
+    ids=["1", "9"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="table",
+    annotate=[("ncbigene", "label")],
+    filter=[
+        ("ensembl_transcript", "transcript_flag", ["MANE Select"])
+    ]
+)
+# Only returns transcripts with "MANE Select" flag
+# 15 transcripts → 2 transcripts (filtered)
+```
+
 #### Search and Route
 
 ```python
@@ -189,32 +244,34 @@ from togoid import LabelConverter
 
 converter = LabelConverter(verbose=True)
 
-# Automatic API detection - gene symbols use SPARQList
+# Convert gene symbols (uses SPARQList API based on dataset config)
 results = converter.convert(
     labels=["BRCA1", "TP53", "EGFR"],
-    taxon="9606"  # Human
+    dataset="ncbigene",
+    taxonomy="9606"  # Human
 )
 # Returns: [{"input": "BRCA1", "match_type": "symbol", "symbol": "BRCA1", "identifier": "672"}, ...]
 
-# Automatic API detection - numeric IDs or other labels use PubDictionaries
+# Convert chemical names (uses PubDictionaries API based on dataset config)
+results = converter.convert(
+    labels=["caffeine"],
+    dataset="chebi",
+    label_types="togoid_chebi_label"  # Optional: override dataset config
+)
+
+# Convert disease names
 results = converter.convert(
     labels=["breast cancer"],
-    dictionaries="togoid_mondo_label"
+    dataset="mondo",
+    threshold=0.5  # PubDictionaries matching threshold
 )
 
-# Manual PubDictionaries API usage
-results = converter.convert_pubdictionaries(
-    labels=["diabetes"],
-    dictionaries="togoid_mondo_label",
-    threshold=0.5
-)
-
-# Manual SPARQList API usage
-results = converter.convert_sparqlist(
-    labels=["BRCA1", "TP53"],
-    sparqlist="label2id_ncbigene",
-    label_types="symbol,synonym",
-    taxon="9606"
+# Label types are auto-configured from dataset, or can be manually specified
+results = converter.convert(
+    labels=["BRCA1"],
+    dataset="ncbigene",
+    label_types="symbol",  # Override: only search by symbol
+    taxonomy="9606"
 )
 ```
 

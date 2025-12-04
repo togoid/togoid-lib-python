@@ -71,18 +71,20 @@ class TogoIDConverter:
         self,
         response: Any,
         route: List[str],
-        annotate: List[Tuple[str, str]]
+        annotate: Optional[List[Tuple[str, str]]] = None,
+        filter: Optional[List[Tuple[str, str, List[str]]]] = None
     ) -> Dict[str, Any]:
         """
-        Add annotations to conversion results
+        Add annotations to conversion results and apply filters
 
         Args:
             response: API response from convert endpoint
             route: Conversion route
-            annotate: List of (dataset_name, field_name) tuples
+            annotate: List of (dataset_name, field_name) tuples to add as columns
+            filter: List of (dataset_name, field_name, allowed_values) tuples to filter results
 
         Returns:
-            Modified response with annotations added
+            Modified response with annotations added and filters applied
         """
         # Import AnnotationsConverter here to avoid circular dependency
         from .annotations import AnnotationsConverter
@@ -103,7 +105,23 @@ class TogoIDConverter:
         # Build a mapping of dataset -> {id -> {field -> value}}
         annotations_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
-        for dataset_name, field_name in annotate:
+        # Collect all fields to fetch (both annotate and filter)
+        fields_to_fetch: Dict[str, set] = {}  # dataset -> set of fields
+
+        if annotate:
+            for dataset_name, field_name in annotate:
+                if dataset_name not in fields_to_fetch:
+                    fields_to_fetch[dataset_name] = set()
+                fields_to_fetch[dataset_name].add(field_name)
+
+        if filter:
+            for dataset_name, field_name, _ in filter:
+                if dataset_name not in fields_to_fetch:
+                    fields_to_fetch[dataset_name] = set()
+                fields_to_fetch[dataset_name].add(field_name)
+
+        # Fetch all required annotations
+        for dataset_name, field_names in fields_to_fetch.items():
             if dataset_name not in route:
                 raise ValueError(
                     f"Dataset '{dataset_name}' not found in route {route}"
@@ -125,7 +143,7 @@ class TogoIDConverter:
                 records = ann_converter.execute_query(
                     dataset_name=dataset_name,
                     ids=list(ids_to_annotate),
-                    fields=[field_name],
+                    fields=list(field_names),
                     filters={}
                 )
 
@@ -136,28 +154,55 @@ class TogoIDConverter:
                 for id_value, fields_data in records.items():
                     if id_value not in annotations_cache[dataset_name]:
                         annotations_cache[dataset_name][id_value] = {}
-                    annotations_cache[dataset_name][id_value][field_name] = fields_data.get(field_name, "")
+                    for field_name in field_names:
+                        annotations_cache[dataset_name][id_value][field_name] = fields_data.get(field_name, "")
 
             except Exception as e:
                 # Log error but continue
-                print(f"Warning: Failed to get annotations for {dataset_name}.{field_name}: {e}", file=sys.stderr)
+                print(f"Warning: Failed to get annotations for {dataset_name}: {e}", file=sys.stderr)
 
-        # Add annotation columns to table data
+        # Apply filters first, then add annotation columns
         annotated_table = []
         for row in table_data:
             if isinstance(row, list):
+                # Check if row passes all filters
+                passes_filter = True
+                if filter:
+                    for dataset_name, field_name, allowed_values in filter:
+                        dataset_index = route.index(dataset_name)
+                        if len(row) > dataset_index:
+                            id_value = str(row[dataset_index])
+                            annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
+
+                            # Check if value matches any allowed value
+                            if isinstance(annotation_value, list):
+                                # If annotation is a list, check if any element matches
+                                if not any(str(v) in allowed_values for v in annotation_value):
+                                    passes_filter = False
+                                    break
+                            else:
+                                # Single value
+                                if str(annotation_value) not in allowed_values:
+                                    passes_filter = False
+                                    break
+
+                if not passes_filter:
+                    continue
+
+                # Add annotation columns
                 new_row = list(row)
-                for dataset_name, field_name in annotate:
-                    dataset_index = route.index(dataset_name)
-                    if len(row) > dataset_index:
-                        id_value = str(row[dataset_index])
-                        annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
-                        # Handle list values
-                        if isinstance(annotation_value, list):
-                            annotation_value = ", ".join(str(v) for v in annotation_value)
-                        new_row.append(str(annotation_value))
-                    else:
-                        new_row.append("")
+                if annotate:
+                    for dataset_name, field_name in annotate:
+                        dataset_index = route.index(dataset_name)
+                        if len(row) > dataset_index:
+                            id_value = str(row[dataset_index])
+                            annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
+                            # Handle list values
+                            if isinstance(annotation_value, list):
+                                annotation_value = ", ".join(str(v) for v in annotation_value)
+                            new_row.append(str(annotation_value))
+                        else:
+                            new_row.append("")
                 annotated_table.append(new_row)
             else:
                 annotated_table.append(row)
@@ -175,6 +220,7 @@ class TogoIDConverter:
         ids: List[str],
         format: str = 'json',
         annotate: Optional[List[Tuple[str, str]]] = None,
+        filter: Optional[List[Tuple[str, str, List[str]]]] = None,
         **kwargs
     ) -> Any:
         """
@@ -185,6 +231,7 @@ class TogoIDConverter:
             ids: List of IDs to convert
             format: Output format - 'json' (default), 'dict', 'table', or 'dataframe'
             annotate: Optional list of (dataset_name, field_name) tuples to add annotations
+            filter: Optional list of (dataset_name, field_name, allowed_values) tuples to filter results
             **kwargs: Additional parameters (report, limit, offset, etc.)
 
         Returns:
@@ -200,16 +247,16 @@ class TogoIDConverter:
         }
         params.update(kwargs)
 
-        # If annotations requested, ensure we get full report format
-        if annotate and 'report' not in params:
+        # If annotations or filters requested, ensure we get full report format
+        if (annotate or filter) and 'report' not in params:
             params['report'] = 'full'
 
         # Get API response
         response = self._make_request('/convert', 'GET', params=params)
 
-        # If annotations requested, add them to the response
-        if annotate and format in ('table', 'dataframe'):
-            response = self._add_annotations(response, route, annotate)
+        # If annotations or filters requested, add them to the response
+        if (annotate or filter) and format in ('table', 'dataframe'):
+            response = self._add_annotations(response, route, annotate, filter)
 
         # Transform based on format
         if format == 'dict':
