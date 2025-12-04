@@ -198,6 +198,127 @@ test_command \
     "BRCA"
 rm -f /tmp/gene_ids.txt
 
+# Python Library Features (not CLI commands)
+echo ""
+echo "=== Python Library Features (Annotations, Filtering, Orthologs) ==="
+
+# Test convert with annotations
+echo ""
+echo "Testing: Convert with Annotations"
+timeout 30 python3 -c "
+from togoid import TogoIDConverter
+converter = TogoIDConverter()
+result = converter.convert(
+    ids=['1', '9'],
+    route=['ncbigene', 'ensembl_gene', 'ensembl_transcript'],
+    format='table',
+    annotate=[('ncbigene', 'label'), ('ncbigene', 'full_name')]
+)
+print(f'Rows: {len(result)}, Columns: {len(result[0]) if result else 0}')
+print(f'First row: {result[0]}')
+assert len(result) > 0 and len(result[0]) == 5, 'Expected 5 columns (3 route + 2 annotations)'
+print('Success: Annotations added')
+" > /tmp/test_output.txt 2>&1
+
+if [ $? -eq 0 ] && grep -q "Success: Annotations added" /tmp/test_output.txt; then
+    echo -e "${GREEN}✓ PASSED - Convert with Annotations${NC}"
+    cat /tmp/test_output.txt
+    ((PASSED++))
+else
+    echo -e "${YELLOW}⚠ WARNING - Convert with Annotations${NC}"
+    cat /tmp/test_output.txt
+    ((WARNINGS++))
+fi
+
+# Test convert with filtering
+echo ""
+echo "Testing: Convert with Filtering"
+timeout 30 python3 -c "
+from togoid import TogoIDConverter
+converter = TogoIDConverter()
+result = converter.convert(
+    ids=['1', '9'],
+    route=['ncbigene', 'ensembl_gene', 'ensembl_transcript'],
+    format='table',
+    annotate=[('ncbigene', 'label')],
+    filter=[('ensembl_transcript', 'transcript_flag', ['MANE Select'])]
+)
+print(f'Filtered rows: {len(result)}')
+if result:
+    print(f'First row: {result[0]}')
+assert len(result) > 0, 'Expected at least 1 filtered result'
+print('Success: Filtering applied')
+" > /tmp/test_output.txt 2>&1
+
+if [ $? -eq 0 ] && grep -q "Success: Filtering applied" /tmp/test_output.txt; then
+    echo -e "${GREEN}✓ PASSED - Convert with Filtering${NC}"
+    cat /tmp/test_output.txt
+    ((PASSED++))
+else
+    echo -e "${YELLOW}⚠ WARNING - Convert with Filtering${NC}"
+    cat /tmp/test_output.txt
+    ((WARNINGS++))
+fi
+
+# Test get_ortholog
+echo ""
+echo "Testing: Get Orthologs"
+timeout 30 python3 -c "
+from togoid import TogoIDConverter
+converter = TogoIDConverter()
+result = converter.get_ortholog(
+    ids=['1', '9'],
+    route=['ncbigene', 'homologene'],
+    target_taxids=['10090', '10116'],  # Mouse and Rat
+    format='table'
+)
+print(f'Orthologs found: {len(result)}')
+for row in result:
+    print(f'  {row}')
+assert len(result) > 0, 'Expected at least 1 ortholog'
+assert len(result[0]) == 3, 'Expected 3 columns (homologene_id, gene_id, taxid)'
+print('Success: Orthologs retrieved')
+" > /tmp/test_output.txt 2>&1
+
+if [ $? -eq 0 ] && grep -q "Success: Orthologs retrieved" /tmp/test_output.txt; then
+    echo -e "${GREEN}✓ PASSED - Get Orthologs${NC}"
+    cat /tmp/test_output.txt
+    ((PASSED++))
+else
+    echo -e "${YELLOW}⚠ WARNING - Get Orthologs${NC}"
+    cat /tmp/test_output.txt
+    ((WARNINGS++))
+fi
+
+# Test get_ortholog with dict format
+echo ""
+echo "Testing: Get Orthologs (dict format)"
+timeout 30 python3 -c "
+from togoid import TogoIDConverter
+converter = TogoIDConverter()
+result = converter.get_ortholog(
+    ids=['1', '9'],
+    route=['ncbigene', 'homologene'],
+    target_taxids=['10090'],  # Mouse only
+    format='dict'
+)
+print(f'Homologene groups: {len(result)}')
+for hom_id, orthologs in result.items():
+    print(f'  {hom_id}: {len(orthologs)} orthologs')
+assert isinstance(result, dict), 'Expected dict format'
+print('Success: Orthologs retrieved in dict format')
+" > /tmp/test_output.txt 2>&1
+
+if [ $? -eq 0 ] && grep -q "Success: Orthologs retrieved in dict format" /tmp/test_output.txt; then
+    echo -e "${GREEN}✓ PASSED - Get Orthologs (dict format)${NC}"
+    cat /tmp/test_output.txt
+    ((PASSED++))
+else
+    echo -e "${YELLOW}⚠ WARNING - Get Orthologs (dict format)${NC}"
+    cat /tmp/test_output.txt
+    ((WARNINGS++))
+fi
+
 # Other Commands
 echo ""
 echo "=== Other Commands Examples ==="
