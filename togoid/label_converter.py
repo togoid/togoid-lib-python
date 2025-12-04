@@ -4,16 +4,14 @@ TogoID Label Converter - Label to ID conversion
 This module converts biological labels (gene names, protein names, disease names, etc.)
 to database identifiers using PubDictionaries API and TogoID SPARQList API.
 
-The tool automatically selects the appropriate API based on the input labels:
-- If labels are gene symbols (NOT numeric IDs): Uses SPARQList API for ncbigene
-- If labels are numeric IDs or other formats: Uses PubDictionaries API
+The tool automatically selects the appropriate API based on dataset configuration:
+- If dataset has label_resolver.sparqlist: Uses SPARQList API
+- Otherwise: Uses PubDictionaries API
 """
 import csv
 import json
-import re
 import sys
-from typing import Dict, List, Optional, Any, Pattern
-from urllib.parse import urlencode
+from typing import Dict, List, Optional, Any
 
 import requests
 
@@ -28,78 +26,63 @@ class LabelConverter:
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
         self.session = requests.Session()
-        self._ncbigene_regex: Optional[Pattern] = None
+        self._dataset_cache: Optional[Dict[str, Any]] = None
 
     def _log(self, message: str):
         """Print log message if verbose mode is enabled"""
         if self.verbose:
             print(f"[INFO] {message}", file=sys.stderr)
 
-    def _get_ncbigene_regex(self) -> Pattern:
+    def _get_dataset_config(self) -> Dict[str, Any]:
         """
-        Fetch ncbigene regex pattern from TogoID API config
+        Fetch dataset configuration from TogoID API
 
         Returns:
-            Compiled regex pattern for ncbigene identifiers
+            Dictionary of dataset configurations
 
         Raises:
             Exception if API request fails
         """
-        if self._ncbigene_regex is not None:
-            return self._ncbigene_regex
+        if self._dataset_cache is not None:
+            return self._dataset_cache
 
-        self._log("Fetching ncbigene regex from TogoID API")
+        self._log("Fetching dataset config from TogoID API")
         url = f"{self.TOGOID_API_BASE_URL}/config/dataset"
         response = self.session.get(url, timeout=10)
         response.raise_for_status()
 
-        datasets = response.json()
+        self._dataset_cache = response.json()
+        return self._dataset_cache
 
-        # datasets is a dictionary with dataset names as keys
-        if "ncbigene" in datasets:
-            regex_pattern = datasets["ncbigene"].get("regex")
-            if regex_pattern:
-                self._log(f"ncbigene regex pattern: {regex_pattern}")
-                # Extract just the pattern without named groups for simpler matching
-                # Pattern is like: ^(?<id>\d+)$ -> extract \d+
-                simple_pattern = regex_pattern.replace("(?<id>", "(").strip()
-                self._ncbigene_regex = re.compile(simple_pattern)
-                return self._ncbigene_regex
-
-        # Fallback to default pattern if not found
-        self._log("Warning: ncbigene regex not found in API, using default pattern")
-        self._ncbigene_regex = re.compile(r"^\d+$")
-        return self._ncbigene_regex
-
-    def _should_use_sparqlist(self, labels: List[str]) -> bool:
+    def _should_use_sparqlist_for_dataset(self, dataset: str) -> bool:
         """
-        Determine if SPARQList API should be used based on input labels
-
-        Logic: If labels are gene symbols (NOT numeric IDs), use SPARQList for ncbigene.
-        If labels are already numeric IDs (matching ncbigene regex), they don't need conversion.
+        Determine if SPARQList API should be used for the given dataset
 
         Args:
-            labels: List of input labels
+            dataset: Dataset name
 
         Returns:
-            True if labels are gene symbols (NOT IDs) for SPARQList, False otherwise
+            True if dataset has label_resolver.sparqlist configured, False otherwise
         """
         try:
-            ncbigene_pattern = self._get_ncbigene_regex()
+            datasets = self._get_dataset_config()
 
-            # Check if all labels match ncbigene ID pattern (numeric)
-            all_numeric_ids = all(ncbigene_pattern.match(label) for label in labels)
-
-            if all_numeric_ids:
-                # Labels are already numeric IDs - no conversion needed
-                self._log("Labels appear to be ncbigene IDs (numeric) -> PubDictionaries API or error")
+            if dataset not in datasets:
+                self._log(f"Dataset '{dataset}' not found in TogoID API config")
                 return False
-            else:
-                # Labels are gene symbols/names - use SPARQList for ncbigene
-                self._log("Labels appear to be gene symbols -> Using SPARQList API for ncbigene")
+
+            dataset_config = datasets[dataset]
+            label_resolver = dataset_config.get("label_resolver", {})
+
+            if "sparqlist" in label_resolver:
+                sparqlist_endpoint = label_resolver["sparqlist"]
+                self._log(f"Dataset '{dataset}' has SPARQList endpoint: {sparqlist_endpoint}")
                 return True
+            else:
+                self._log(f"Dataset '{dataset}' does not have SPARQList endpoint, using PubDictionaries")
+                return False
         except Exception as e:
-            self._log(f"Error checking regex pattern: {e}. Defaulting to PubDictionaries API")
+            self._log(f"Error checking dataset config: {e}. Defaulting to PubDictionaries API")
             return False
 
     def convert_pubdictionaries(
@@ -292,6 +275,7 @@ class LabelConverter:
     def convert(
         self,
         labels: List[str],
+        dataset: str,
         dictionaries: Optional[str] = None,
         tags: Optional[str] = None,
         threshold: float = 0.5,
@@ -300,11 +284,12 @@ class LabelConverter:
         taxon: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Convert labels to IDs - automatically selects API based on input labels
+        Convert labels to IDs - automatically selects API based on dataset configuration
 
         Args:
             labels: List of labels to search
-            dictionaries: Dictionary names for PubDictionaries (required if not using ncbigene)
+            dataset: Dataset name to determine API endpoint
+            dictionaries: Dictionary names for PubDictionaries (required if dataset doesn't have SPARQList)
             tags: Taxonomy tags for PubDict (e.g., "9606" for human)
             threshold: Matching score threshold for PubDict (0-1)
             preferred_dictionary: Preferred dictionary for PubDict synonym resolution
@@ -314,19 +299,25 @@ class LabelConverter:
         Returns:
             List of result dictionaries
         """
-        if self._should_use_sparqlist(labels):
-            self._log("Auto-detected: Using SPARQList API based on label pattern")
+        if self._should_use_sparqlist_for_dataset(dataset):
+            # Get SPARQList endpoint from dataset config
+            datasets = self._get_dataset_config()
+            dataset_config = datasets[dataset]
+            sparqlist_endpoint = dataset_config["label_resolver"]["sparqlist"]
+
+            self._log(f"Using SPARQList API for dataset '{dataset}'")
             return self.convert_sparqlist(
                 labels=labels,
-                sparqlist="label2id_ncbigene",
+                sparqlist=sparqlist_endpoint,
                 label_types=label_types,
                 taxon=taxon,
             )
         else:
-            self._log("Auto-detected: Using PubDictionaries API")
+            self._log(f"Using PubDictionaries API for dataset '{dataset}'")
             if not dictionaries:
                 raise ValueError(
-                    "The --dictionaries argument is required when labels do not match ncbigene pattern"
+                    f"The --dictionaries argument is required for dataset '{dataset}' "
+                    "which does not have SPARQList configured"
                 )
             return self.convert_pubdictionaries(
                 labels=labels,

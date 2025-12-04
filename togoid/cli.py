@@ -27,7 +27,7 @@ Examples:
   togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
   # Convert labels to IDs
-  togoid label2id --labels "BRCA1,TP53" --taxon 9606
+  togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxon 9606
 
   # Get annotations
   togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym
@@ -59,6 +59,9 @@ Examples:
     label_input = label2id_parser.add_mutually_exclusive_group(required=True)
     label_input.add_argument('--labels', help='Comma-separated labels')
     label_input.add_argument('--label-file', help='File containing labels (one per line or comma-separated)')
+
+    # Dataset argument (required)
+    label2id_parser.add_argument('--dataset', required=True, help='Dataset name (e.g., ncbigene)')
 
     # SPARQList options (for gene symbols)
     label2id_parser.add_argument('--label-types', default='symbol,synonym',
@@ -192,6 +195,7 @@ def handle_label2id(args):
     try:
         results = converter.convert(
             labels=labels,
+            dataset=args.dataset,
             dictionaries=args.dictionaries,
             tags=args.tags,
             threshold=args.threshold,
