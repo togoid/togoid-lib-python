@@ -276,11 +276,10 @@ class LabelConverter:
         self,
         labels: List[str],
         dataset: str,
-        dictionaries: Optional[str] = None,
+        label_types: Optional[str] = None,
         tags: Optional[str] = None,
         threshold: float = 0.5,
         preferred_dictionary: Optional[str] = None,
-        label_types: Optional[str] = None,
         taxonomy: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -289,11 +288,12 @@ class LabelConverter:
         Args:
             labels: List of labels to search
             dataset: Dataset name to determine API endpoint
-            dictionaries: Dictionary names for PubDictionaries (required if dataset doesn't have SPARQList)
+            label_types: Label types or dictionary names (if None, uses dataset config)
+                        - For SPARQList: comma-separated label types (e.g., "symbol,synonym")
+                        - For PubDictionaries: comma-separated dictionary names (e.g., "togoid_chebi_label")
             tags: Taxonomy tags for PubDict (e.g., "9606" for human)
             threshold: Matching score threshold for PubDict (0-1)
             preferred_dictionary: Preferred dictionary for PubDict synonym resolution
-            label_types: Comma-separated label types for SPARQList (if None, uses dataset config)
             taxonomy: Taxonomy ID for SPARQList (e.g., "9606" for human)
 
         Returns:
@@ -325,15 +325,28 @@ class LabelConverter:
                 taxonomy=taxonomy,
             )
         else:
+            # Use PubDictionaries API
+            datasets = self._get_dataset_config()
+            dataset_config = datasets.get(dataset, {})
+            label_resolver = dataset_config.get("label_resolver", {})
+
+            # Use label_types from argument or extract dictionaries from dataset config
+            if label_types is None:
+                # Extract dictionary names from dataset config
+                dictionary_configs = label_resolver.get("dictionaries", [])
+                if dictionary_configs:
+                    label_types = ",".join([d["dictionary"] for d in dictionary_configs])
+                else:
+                    raise ValueError(
+                        f"The --label_types argument is required for dataset '{dataset}' "
+                        "which does not have dictionary configuration"
+                    )
+                self._log(f"Using dictionaries from dataset config: {label_types}")
+
             self._log(f"Using PubDictionaries API for dataset '{dataset}'")
-            if not dictionaries:
-                raise ValueError(
-                    f"The --dictionaries argument is required for dataset '{dataset}' "
-                    "which does not have SPARQList configured"
-                )
             return self.convert_pubdictionaries(
                 labels=labels,
-                dictionaries=dictionaries,
+                dictionaries=label_types,
                 tags=tags,
                 threshold=threshold,
                 preferred_dictionary=preferred_dictionary,
