@@ -67,7 +67,7 @@ test_command \
 
 test_command \
     "Label to ID conversion" \
-    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53,EGFR' --taxon 9606" \
+    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53,EGFR' --dataset ncbigene --taxonomy 9606" \
     "672"
 
 test_command \
@@ -123,7 +123,7 @@ echo "=== Label2ID Command Examples ==="
 
 test_command \
     "Basic label2id conversion" \
-    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53,EGFR' --taxon 9606" \
+    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53,EGFR' --dataset ncbigene --taxonomy 9606" \
     "672"
 
 # Test from file
@@ -132,19 +132,24 @@ echo "Testing: Label2ID from file"
 echo -e "BRCA1\nTP53\nEGFR" > /tmp/test_genes.txt
 test_command \
     "Label2ID from file" \
-    "timeout 15 python3 -m togoid label2id --label-file /tmp/test_genes.txt --taxon 9606" \
+    "timeout 15 python3 -m togoid label2id --label-file /tmp/test_genes.txt --dataset ncbigene --taxonomy 9606" \
     "672"
 rm -f /tmp/test_genes.txt
 
 test_command \
     "Label2ID CSV output" \
-    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53' --taxon 9606 --format csv" \
+    "timeout 15 python3 -m togoid label2id --labels 'BRCA1,TP53' --dataset ncbigene --taxonomy 9606 --format csv" \
     "input,match_type"
 
 test_command \
-    "Label2ID with PubDictionaries" \
-    "timeout 15 python3 -m togoid label2id --labels 'breast cancer' --dictionaries 'togoid_mondo_label'" \
-    "breast cancer"
+    "Label2ID with custom label_types" \
+    "timeout 15 python3 -m togoid label2id --labels 'BRCA1' --dataset ncbigene --label_types 'symbol' --taxonomy 9606" \
+    "672"
+
+test_command \
+    "Label2ID for ChEBI dataset" \
+    "timeout 15 python3 -m togoid label2id --labels 'caffeine' --dataset chebi --label_types 'togoid_chebi_label'" \
+    "caffeine"
 
 # Annotate Command Examples
 echo ""

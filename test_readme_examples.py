@@ -49,10 +49,11 @@ def test_quick_start_label_conversion():
     from togoid import LabelConverter
     label_converter = LabelConverter()
 
-    # Gene symbols → automatically uses SPARQList API for ncbigene
+    # Convert labels with dataset specification
     results = label_converter.convert(
         labels=["BRCA1", "TP53"],
-        taxon="9606"  # Human
+        dataset="ncbigene",
+        taxonomy="9606"  # Human
     )
     assert len(results) == 2, f"Expected 2 results, got {len(results)}"
     assert results[0]["identifier"] == "672", "BRCA1 should map to 672"
@@ -60,12 +61,13 @@ def test_quick_start_label_conversion():
     for r in results:
         print(f"    {r['input']} -> {r['identifier']}")
 
-    # Other labels → automatically uses PubDictionaries API
+    # Convert labels for other datasets
     results2 = label_converter.convert(
-        labels=["breast cancer"],
-        dictionaries="togoid_mondo_label"
+        labels=["caffeine"],
+        dataset="chebi",
+        label_types="togoid_chebi_label"
     )
-    print(f"✓ PubDictionaries conversion: {len(results2)} results")
+    print(f"✓ Chemical names conversion: {len(results2)} results")
 
     return True
 
@@ -144,40 +146,42 @@ def test_label_conversion_detailed():
     from togoid import LabelConverter
     converter = LabelConverter(verbose=False)
 
-    # Automatic API detection - gene symbols use SPARQList
+    # Convert gene symbols (uses SPARQList API based on dataset config)
     results = converter.convert(
         labels=["BRCA1", "TP53", "EGFR"],
-        taxon="9606"  # Human
+        dataset="ncbigene",
+        taxonomy="9606"  # Human
     )
     assert len(results) == 3, f"Expected 3 results, got {len(results)}"
-    print(f"✓ Auto-detection (gene symbols): {len(results)} results")
+    print(f"✓ Gene symbols (SPARQList): {len(results)} results")
     for r in results:
         print(f"    {r['input']} -> {r['identifier']} ({r['match_type']})")
 
-    # Automatic API detection - other labels use PubDictionaries
+    # Convert chemical names (uses PubDictionaries API based on dataset config)
     results2 = converter.convert(
+        labels=["caffeine"],
+        dataset="chebi",
+        label_types="togoid_chebi_label"  # Optional: override dataset config
+    )
+    print(f"✓ Chemical names (PubDictionaries): {len(results2)} results")
+
+    # Convert disease names
+    results3 = converter.convert(
         labels=["breast cancer"],
-        dictionaries="togoid_mondo_label"
+        dataset="mondo",
+        threshold=0.5  # PubDictionaries matching threshold
     )
-    print(f"✓ Auto-detection (other labels): {len(results2)} results")
+    print(f"✓ Disease names: {len(results3)} results")
 
-    # Manual PubDictionaries API usage
-    results3 = converter.convert_pubdictionaries(
-        labels=["diabetes"],
-        dictionaries="togoid_mondo_label",
-        threshold=0.5
+    # Label types are auto-configured from dataset, or can be manually specified
+    results4 = converter.convert(
+        labels=["BRCA1"],
+        dataset="ncbigene",
+        label_types="symbol",  # Override: only search by symbol
+        taxonomy="9606"
     )
-    print(f"✓ Manual PubDictionaries API: {len(results3)} results")
-
-    # Manual SPARQList API usage
-    results4 = converter.convert_sparqlist(
-        labels=["BRCA1", "TP53"],
-        sparqlist="label2id_ncbigene",
-        label_types="symbol,synonym",
-        taxon="9606"
-    )
-    assert len(results4) == 2, f"Expected 2 results, got {len(results4)}"
-    print(f"✓ Manual SPARQList API: {len(results4)} results")
+    assert len(results4) >= 1, f"Expected at least 1 result, got {len(results4)}"
+    print(f"✓ Manual label_types override: {len(results4)} results")
     for r in results4:
         print(f"    {r['input']} -> {r['identifier']}")
 
@@ -212,6 +216,88 @@ def test_annotations_detailed():
         label = annotations.get('label', 'N/A')
         gene_type = annotations.get('type_of_gene', 'N/A')
         print(f"    {id_val}: label={label}, type={gene_type}")
+
+    return True
+
+
+def test_convert_with_annotations():
+    """Test ID Conversion with Annotations"""
+    print("\n=== Testing ID Conversion with Annotations ===")
+
+    from togoid import TogoIDConverter
+    converter = TogoIDConverter()
+
+    # Add annotation columns to conversion results
+    result = converter.convert(
+        ids=["1", "9"],
+        route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+        format="table",
+        annotate=[
+            ("ncbigene", "label"),           # Add gene label from ncbigene
+            ("ncbigene", "full_name"),       # Add full gene name from ncbigene
+            ("ensembl_gene", "label")        # Add gene label from ensembl_gene
+        ]
+    )
+    assert len(result) > 0, "No results returned"
+    assert len(result[0]) == 6, f"Expected 6 columns (3 route + 3 annotations), got {len(result[0])}"
+    print(f"✓ Annotations: {len(result)} rows with {len(result[0])} columns")
+    print(f"  First row: {result[0]}")
+
+    return True
+
+
+def test_convert_with_filtering():
+    """Test ID Conversion with Filtering"""
+    print("\n=== Testing ID Conversion with Filtering ===")
+
+    from togoid import TogoIDConverter
+    converter = TogoIDConverter()
+
+    # Filter conversion results by annotation values
+    result = converter.convert(
+        ids=["1", "9"],
+        route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+        format="table",
+        annotate=[("ncbigene", "label")],
+        filter=[
+            ("ensembl_transcript", "transcript_flag", ["MANE Select"])
+        ]
+    )
+    print(f"✓ Filtering: {len(result)} rows (filtered by MANE Select)")
+    if len(result) > 0:
+        print(f"  First row: {result[0]}")
+
+    return True
+
+
+def test_get_ortholog():
+    """Test Get Orthologs"""
+    print("\n=== Testing Get Orthologs ===")
+
+    from togoid import TogoIDConverter
+    converter = TogoIDConverter()
+
+    # Get orthologs through round-trip conversion and taxonomy filtering
+    result = converter.get_ortholog(
+        ids=["1", "9"],                      # Human genes
+        route=["ncbigene", "homologene"],    # Via homologene
+        target_taxids=["10090", "10116"]     # Mouse and Rat
+    )
+    assert len(result) > 0, "No orthologs found"
+    assert len(result[0]) == 3, f"Expected 3 columns, got {len(result[0])}"
+    print(f"✓ Orthologs: {len(result)} results")
+    for row in result:
+        print(f"  {row}")
+
+    # Test dict format
+    result_dict = converter.get_ortholog(
+        ids=["1", "9"],
+        route=["ncbigene", "homologene"],
+        target_taxids=["10090"],  # Mouse only
+        format="dict"
+    )
+    assert isinstance(result_dict, dict), "Dict format should return dict"
+    print(f"✓ Orthologs (dict format): {len(result_dict)} homologene groups")
 
     return True
 
@@ -259,6 +345,9 @@ def main():
         ("Quick Start - Label Conversion", test_quick_start_label_conversion),
         ("Quick Start - Annotations", test_quick_start_annotations),
         ("ID Conversion Formats", test_id_conversion_formats),
+        ("ID Conversion with Annotations", test_convert_with_annotations),
+        ("ID Conversion with Filtering", test_convert_with_filtering),
+        ("Get Orthologs", test_get_ortholog),
         ("Label Conversion Detailed", test_label_conversion_detailed),
         ("Annotations Detailed", test_annotations_detailed),
         ("API Methods", test_api_methods),
