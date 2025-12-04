@@ -502,3 +502,137 @@ class TogoIDConverter:
             Taxonomy configuration
         """
         return self._make_request('/config/taxonomy')
+
+    def get_ortholog(
+        self,
+        ids: List[str],
+        route: List[str],
+        target_taxids: List[str],
+        format: str = 'table'
+    ) -> Any:
+        """
+        Get orthologs by round-trip conversion through specified route and taxonomy filtering
+
+        This method performs a special conversion pattern:
+        1. Forward conversion: Follow the route (e.g., ncbigene -> homologene)
+        2. Reverse conversion: Go back through route in reverse (e.g., homologene -> ncbigene)
+        3. Taxonomy conversion: Convert to taxonomy IDs
+        4. Filter: Keep only results matching target_taxids
+
+        Args:
+            ids: List of source IDs
+            route: Conversion route (e.g., ["ncbigene", "homologene"])
+            target_taxids: List of taxonomy IDs to filter by (e.g., ["10090", "10116"])
+            format: Output format - 'table' (default), 'dict', or 'json'
+
+        Returns:
+            Filtered ortholog results in specified format
+
+        Example:
+            >>> converter = TogoIDConverter()
+            >>> result = converter.get_ortholog(
+            ...     ids=["1", "9"],
+            ...     route=["ncbigene", "homologene"],
+            ...     target_taxids=["10090", "10116"]
+            ... )
+            # Returns mouse and rat orthologs
+        """
+        # Step 1: Forward conversion (e.g., ncbigene -> homologene)
+        forward_result = self.convert(
+            ids=ids,
+            route=route,
+            format='json'
+        )
+
+        # Extract intermediate IDs
+        intermediate_ids = forward_result.get('results', [])
+        if not intermediate_ids:
+            # No results from forward conversion
+            if format == 'dict':
+                return {}
+            elif format == 'table':
+                return []
+            else:
+                return {'results': []}
+
+        # Step 2: Reverse conversion (e.g., homologene -> ncbigene)
+        reverse_route = list(reversed(route))
+        reverse_result = self.convert(
+            ids=intermediate_ids,
+            route=reverse_route,
+            format='json',
+            report='pair'
+        )
+
+        reverse_pairs = reverse_result.get('results', [])
+        if not reverse_pairs:
+            # No results from reverse conversion
+            if format == 'dict':
+                return {}
+            elif format == 'table':
+                return []
+            else:
+                return {'results': []}
+
+        # Extract target IDs from reverse conversion
+        target_ids = set()
+        # Build mapping: intermediate_id -> [target_ids]
+        intermediate_to_targets: Dict[str, List[str]] = {}
+        for pair in reverse_pairs:
+            if isinstance(pair, list) and len(pair) >= 2:
+                intermediate_id = str(pair[0])
+                target_id = str(pair[1])
+                target_ids.add(target_id)
+                if intermediate_id not in intermediate_to_targets:
+                    intermediate_to_targets[intermediate_id] = []
+                intermediate_to_targets[intermediate_id].append(target_id)
+
+        # Step 3: Convert target IDs to taxonomy
+        taxonomy_route = [route[0], 'taxonomy']  # Use source database -> taxonomy
+        taxonomy_result = self.convert(
+            ids=list(target_ids),
+            route=taxonomy_route,
+            format='json',
+            report='pair'
+        )
+
+        taxonomy_pairs = taxonomy_result.get('results', [])
+
+        # Build mapping: target_id -> taxonomy_id
+        target_to_taxonomy: Dict[str, str] = {}
+        for pair in taxonomy_pairs:
+            if isinstance(pair, list) and len(pair) >= 2:
+                target_id = str(pair[0])
+                taxonomy_id = str(pair[1])
+                target_to_taxonomy[target_id] = taxonomy_id
+
+        # Step 4: Filter by target_taxids
+        filtered_results = []
+        for intermediate_id, target_id_list in intermediate_to_targets.items():
+            for target_id in target_id_list:
+                taxonomy_id = target_to_taxonomy.get(target_id)
+                if taxonomy_id in target_taxids:
+                    # Include this result
+                    filtered_results.append([intermediate_id, target_id, taxonomy_id])
+
+        # Format output
+        if format == 'dict':
+            # Group by intermediate_id
+            result_dict: Dict[str, List[Tuple[str, str]]] = {}
+            for row in filtered_results:
+                intermediate_id = row[0]
+                target_id = row[1]
+                taxonomy_id = row[2]
+                if intermediate_id not in result_dict:
+                    result_dict[intermediate_id] = []
+                result_dict[intermediate_id].append((target_id, taxonomy_id))
+            return result_dict
+        elif format == 'table':
+            return filtered_results
+        else:  # json
+            return {
+                'ids': ids,
+                'route': route,
+                'target_taxids': target_taxids,
+                'results': filtered_results
+            }

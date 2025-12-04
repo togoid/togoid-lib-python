@@ -7,6 +7,7 @@ Python library and CLI tool for biological database ID conversion and annotation
 - **ID Conversion**: Convert IDs between biological databases
 - **ID Conversion with Annotations**: Add annotation columns during conversion
 - **ID Conversion with Filtering**: Filter conversion results by annotation values
+- **Ortholog Retrieval**: Get orthologs through round-trip conversion and taxonomy filtering
 - **Label to ID**: Convert biological labels (gene names, etc.) to database IDs with dataset-based API selection
 - **Annotations**: Get labels and annotations for database IDs
 - **Multiple Formats**: Support for JSON, CSV, TSV, dict, table, and pandas DataFrame
@@ -94,6 +95,13 @@ result_filtered = converter.convert(
     format="table",
     annotate=[("ncbigene", "label")],
     filter=[("ensembl_transcript", "transcript_flag", ["MANE Select"])]  # Only MANE Select transcripts
+)
+
+# Get Orthologs
+orthologs = converter.get_ortholog(
+    ids=["1", "9"],
+    route=["ncbigene", "homologene"],
+    target_taxids=["10090", "10116"]  # Mouse and Rat
 )
 
 # Label to ID Conversion
@@ -222,6 +230,24 @@ result = converter.convert(
 )
 # Only returns transcripts with "MANE Select" flag
 # 15 transcripts → 2 transcripts (filtered)
+```
+
+#### Get Orthologs
+
+```python
+# Get orthologs through round-trip conversion and taxonomy filtering
+# Process: ncbigene -> homologene -> ncbigene -> taxonomy -> filter by taxid
+result = converter.get_ortholog(
+    ids=["1", "9"],                      # Human genes
+    route=["ncbigene", "homologene"],    # Via homologene
+    target_taxids=["10090", "10116"]     # Mouse and Rat
+)
+# Returns: [
+#   ['11167', '117586', '10090'],  # homologene_id, mouse_gene_id, taxid
+#   ['11167', '140656', '10116'],  # homologene_id, rat_gene_id, taxid
+#   ['37329', '116632', '10116'],
+#   ['37329', '17961', '10090']
+# ]
 ```
 
 #### Search and Route
