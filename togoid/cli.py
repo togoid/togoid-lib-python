@@ -27,7 +27,7 @@ Examples:
   togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
   # Convert labels to IDs
-  togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxon 9606
+  togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
 
   # Get annotations
   togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym
@@ -64,9 +64,9 @@ Examples:
     label2id_parser.add_argument('--dataset', required=True, help='Dataset name (e.g., ncbigene)')
 
     # SPARQList options (for gene symbols)
-    label2id_parser.add_argument('--label-types', default='symbol,synonym',
-                                 help='Label types for SPARQList (default: symbol,synonym)')
-    label2id_parser.add_argument('--taxon', help='Taxonomy ID for SPARQList (e.g., 9606 for human)')
+    label2id_parser.add_argument('--label-types',
+                                 help='Label types for SPARQList (comma-separated, uses dataset config if not specified)')
+    label2id_parser.add_argument('--taxonomy', help='Taxonomy ID for SPARQList (e.g., 9606 for human)')
 
     # PubDictionaries options (for other labels)
     label2id_parser.add_argument('--dictionaries', help='Dictionary names for PubDictionaries (comma-separated)')
@@ -201,7 +201,7 @@ def handle_label2id(args):
             threshold=args.threshold,
             preferred_dictionary=args.preferred_dictionary,
             label_types=args.label_types,
-            taxon=args.taxon,
+            taxonomy=args.taxonomy,
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

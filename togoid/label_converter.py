@@ -210,7 +210,7 @@ class LabelConverter:
         labels: List[str],
         sparqlist: str,
         label_types: str,
-        taxon: Optional[str] = None,
+        taxonomy: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Convert labels to IDs using TogoID SPARQList API
@@ -219,7 +219,7 @@ class LabelConverter:
             labels: List of labels to search
             sparqlist: SPARQList endpoint name
             label_types: Comma-separated label types
-            taxon: Taxonomy ID (e.g., "9606" for human)
+            taxonomy: Taxonomy ID (e.g., "9606" for human)
 
         Returns:
             List of result dictionaries
@@ -232,8 +232,8 @@ class LabelConverter:
             "labels": ",".join(labels),
             "label_types": label_types,
         }
-        if taxon:
-            params["taxon"] = taxon
+        if taxonomy:
+            params["taxon"] = taxonomy
 
         url = f"{self.SPARQLIST_BASE_URL}/{sparqlist}"
         self._log(f"Request URL: {url}")
@@ -280,8 +280,8 @@ class LabelConverter:
         tags: Optional[str] = None,
         threshold: float = 0.5,
         preferred_dictionary: Optional[str] = None,
-        label_types: str = "symbol,synonym",
-        taxon: Optional[str] = None,
+        label_types: Optional[str] = None,
+        taxonomy: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Convert labels to IDs - automatically selects API based on dataset configuration
@@ -293,8 +293,8 @@ class LabelConverter:
             tags: Taxonomy tags for PubDict (e.g., "9606" for human)
             threshold: Matching score threshold for PubDict (0-1)
             preferred_dictionary: Preferred dictionary for PubDict synonym resolution
-            label_types: Comma-separated label types for SPARQList
-            taxon: Taxonomy ID for SPARQList (e.g., "9606" for human)
+            label_types: Comma-separated label types for SPARQList (if None, uses dataset config)
+            taxonomy: Taxonomy ID for SPARQList (e.g., "9606" for human)
 
         Returns:
             List of result dictionaries
@@ -303,14 +303,26 @@ class LabelConverter:
             # Get SPARQList endpoint from dataset config
             datasets = self._get_dataset_config()
             dataset_config = datasets[dataset]
-            sparqlist_endpoint = dataset_config["label_resolver"]["sparqlist"]
+            label_resolver = dataset_config["label_resolver"]
+            sparqlist_endpoint = label_resolver["sparqlist"]
+
+            # Use label_types from argument or extract from dataset config
+            if label_types is None:
+                # Extract label_type values from dataset config
+                label_type_configs = label_resolver.get("label_types", [])
+                if label_type_configs:
+                    label_types = ",".join([lt["label_type"] for lt in label_type_configs])
+                else:
+                    # Fallback default
+                    label_types = "symbol,synonym"
+                self._log(f"Using label_types from dataset config: {label_types}")
 
             self._log(f"Using SPARQList API for dataset '{dataset}'")
             return self.convert_sparqlist(
                 labels=labels,
                 sparqlist=sparqlist_endpoint,
                 label_types=label_types,
-                taxon=taxon,
+                taxonomy=taxonomy,
             )
         else:
             self._log(f"Using PubDictionaries API for dataset '{dataset}'")
