@@ -218,7 +218,7 @@ def handle_convert(args, converter: TogoIDConverter):
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
-def handle_label2id(args):
+def handle_label2id(args, api_url: str):
     """Handle label2id command"""
     # Parse labels
     if args.labels:
@@ -228,7 +228,7 @@ def handle_label2id(args):
             labels = parse_labels(f.read())
 
     # Create converter
-    converter = LabelConverter(verbose=args.verbose)
+    converter = LabelConverter(verbose=args.verbose, api_base_url=api_url)
 
     # Convert labels to IDs
     try:
@@ -381,7 +381,7 @@ def main():
             handle_convert(args, converter)
 
         elif args.command == 'label2id':
-            return handle_label2id(args)
+            return handle_label2id(args, api_url)
 
         elif args.command == 'annotate':
             return handle_annotate(args, api_url)

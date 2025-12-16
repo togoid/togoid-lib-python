@@ -10,6 +10,7 @@ The tool automatically selects the appropriate API based on dataset configuratio
 """
 import csv
 import json
+import os
 import sys
 from typing import Dict, List, Optional, Any
 
@@ -21,12 +22,14 @@ class LabelConverter:
 
     PUBDICT_BASE_URL = "https://pubdictionaries.org"
     SPARQLIST_BASE_URL = "https://dx.dbcls.jp/togoid/sparqlist/api"
-    TOGOID_API_BASE_URL = "https://api.togoid.dbcls.jp"
+    DEFAULT_TOGOID_API_BASE_URL = "https://api.togoid.dbcls.jp"
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, api_base_url: Optional[str] = None):
         self.verbose = verbose
         self.session = requests.Session()
         self._dataset_cache: Optional[Dict[str, Any]] = None
+        base_url = api_base_url or os.getenv("TOGOID_API_ENDPOINT") or self.DEFAULT_TOGOID_API_BASE_URL
+        self.api_base_url = base_url.rstrip('/')
 
     def _log(self, message: str):
         """Print log message if verbose mode is enabled"""
@@ -47,7 +50,7 @@ class LabelConverter:
             return self._dataset_cache
 
         self._log("Fetching dataset config from TogoID API")
-        url = f"{self.TOGOID_API_BASE_URL}/config/dataset"
+        url = f"{self.api_base_url}/config/dataset"
         response = self.session.get(url, timeout=10)
         response.raise_for_status()
 
@@ -411,5 +414,4 @@ def output_results(
             )
             writer.writeheader()
             writer.writerows(results)
-
 

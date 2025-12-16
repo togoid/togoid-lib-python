@@ -364,21 +364,22 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
 ### Label2ID Command
 
 ```bash
-# Basic conversion (automatic API detection)
-togoid label2id --labels "BRCA1,TP53,EGFR" --taxon 9606
+# Basic conversion
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxon 9606
+togoid label2id --dataset chebi --labels 'caffeine' --label_types 'togoid_chebi_label'
 
 # From file
 echo -e "BRCA1\nTP53\nEGFR" > genes.txt
-togoid label2id --label-file genes.txt --taxon 9606
+togoid label2id --dataset ncbigene --label-file genes.txt --taxon 9606
 
 # CSV output
-togoid label2id --labels "BRCA1,TP53" --taxon 9606 --format csv --output results.csv
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --format csv --output results.csv
 
 # With PubDictionaries (for non-gene labels)
-togoid label2id --labels "breast cancer" --dictionaries "togoid_mondo_label"
+togoid label2id --dataset chebi --labels "breast cancer" --label_types "togoid_mondo_label"
 
 # Verbose mode
-togoid label2id --labels "BRCA1,TP53" --taxon 9606 --verbose
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --verbose
 ```
 
 ### Annotate Command
