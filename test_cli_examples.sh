@@ -1,10 +1,12 @@
 #!/bin/bash
 # Test script to verify all CLI examples from README.md work correctly
 
-set -e  # Exit on error
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+# Use development API endpoint if specified; default to staging domain during development
+export TOGOID_API_ENDPOINT="${TOGOID_API_ENDPOINT:-https://api.togoid.dbcls.jp.il3c.com}"
+echo "Using TogoID API endpoint: ${TOGOID_API_ENDPOINT}"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -27,12 +29,14 @@ test_command() {
     echo "Command: $command"
 
     if eval "$command" > /tmp/test_output.txt 2>&1; then
+        cat /tmp/test_output.txt
         if [ -n "$expected_pattern" ]; then
             if grep -q "$expected_pattern" /tmp/test_output.txt; then
                 echo -e "${GREEN}✓ PASSED${NC}"
                 ((PASSED++))
             else
                 echo -e "${RED}✗ FAILED - Pattern not found: $expected_pattern${NC}"
+                echo "--- Output ---"
                 cat /tmp/test_output.txt
                 ((FAILED++))
             fi
@@ -42,6 +46,7 @@ test_command() {
         fi
     else
         echo -e "${YELLOW}⚠ WARNING - Command failed (may be API issue)${NC}"
+        echo "--- Output ---"
         cat /tmp/test_output.txt
         ((WARNINGS++))
     fi
@@ -104,6 +109,8 @@ echo ""
 echo "Testing: Save to file"
 rm -f /tmp/test_results.csv
 if timeout 15 python3 -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene --output /tmp/test_results.csv 2>&1; then
+    echo "--- Output ---"
+    cat /tmp/test_results.csv
     if [ -f /tmp/test_results.csv ]; then
         echo -e "${GREEN}✓ PASSED - File created${NC}"
         ((PASSED++))
@@ -114,6 +121,8 @@ if timeout 15 python3 -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene 
     fi
 else
     echo -e "${YELLOW}⚠ WARNING - Command failed${NC}"
+    echo "--- Output ---"
+    cat /tmp/test_results.csv 2>/dev/null || true
     ((WARNINGS++))
 fi
 
@@ -175,6 +184,8 @@ echo ""
 echo "Testing: Annotate CSV output"
 rm -f /tmp/test_genes.csv
 if timeout 20 python3 -m togoid annotate --dataset ncbigene --ids 672 --field gene_synonym --format csv --output /tmp/test_genes.csv 2>&1; then
+    echo "--- Output ---"
+    cat /tmp/test_genes.csv
     if [ -f /tmp/test_genes.csv ] && grep -q "BRCA" /tmp/test_genes.csv; then
         echo -e "${GREEN}✓ PASSED - CSV file created with expected content${NC}"
         ((PASSED++))
@@ -185,6 +196,8 @@ if timeout 20 python3 -m togoid annotate --dataset ncbigene --ids 672 --field ge
     fi
 else
     echo -e "${YELLOW}⚠ WARNING - Command failed${NC}"
+    echo "--- Output ---"
+    cat /tmp/test_genes.csv 2>/dev/null || true
     ((WARNINGS++))
 fi
 
