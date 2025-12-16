@@ -165,6 +165,87 @@ def test_id_conversion_formats():
     return True
 
 
+def test_report_options():
+    """Test different report options"""
+    print("\n=== Testing Report Options ===")
+
+    from togoid import TogoIDConverter
+    converter = TogoIDConverter()
+
+    # report='target' (default) - only target IDs
+    target_result = converter.convert(
+        ids=["1", "9"],
+        route=["ncbigene", "ensembl_gene"],
+        format="table",
+        report="target"
+    )
+    assert len(target_result) > 0, "No results for report='target'"
+    assert len(target_result[0]) == 1, f"Expected 1 column for report='target', got {len(target_result[0])}"
+    print(f"✓ report='target': {len(target_result)} rows, 1 column (target IDs only)")
+
+    # report='pair' - source and target ID pairs
+    pair_result = converter.convert(
+        ids=["1", "9"],
+        route=["ncbigene", "ensembl_gene"],
+        format="table",
+        report="pair"
+    )
+    assert len(pair_result) > 0, "No results for report='pair'"
+    assert len(pair_result[0]) == 2, f"Expected 2 columns for report='pair', got {len(pair_result[0])}"
+    print(f"✓ report='pair': {len(pair_result)} rows, 2 columns (source, target)")
+    print(f"  First row: {pair_result[0]}")
+
+    # report='full' - all intermediate IDs in multi-hop conversion
+    full_result = converter.convert(
+        ids=["1", "9"],
+        route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+        format="table",
+        report="full"
+    )
+    assert len(full_result) > 0, "No results for report='full'"
+    assert len(full_result[0]) == 3, f"Expected 3 columns for report='full', got {len(full_result[0])}"
+    print(f"✓ report='full': {len(full_result)} rows, 3 columns (all intermediate IDs)")
+    print(f"  First row: {full_result[0]}")
+
+    # Test DataFrame with different report options
+    try:
+        # DataFrame with report='target'
+        df_target = converter.convert(
+            ids=["1", "9"],
+            route=["ncbigene", "ensembl_gene"],
+            format="dataframe",
+            report="target"
+        )
+        assert 'target_id' in df_target.columns, "Missing 'target_id' column"
+        print(f"✓ DataFrame with report='target': columns={list(df_target.columns)}")
+
+        # DataFrame with report='pair'
+        df_pair = converter.convert(
+            ids=["1", "9"],
+            route=["ncbigene", "ensembl_gene"],
+            format="dataframe",
+            report="pair"
+        )
+        assert 'source_id' in df_pair.columns and 'target_id' in df_pair.columns, \
+            "Missing source_id or target_id columns"
+        print(f"✓ DataFrame with report='pair': columns={list(df_pair.columns)}")
+
+        # DataFrame with report='full'
+        df_full = converter.convert(
+            ids=["1", "9"],
+            route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+            format="dataframe",
+            report="full"
+        )
+        assert len(df_full.columns) == 3, f"Expected 3 columns for report='full', got {len(df_full.columns)}"
+        print(f"✓ DataFrame with report='full': columns={list(df_full.columns)}")
+
+    except ImportError:
+        print("⚠ DataFrame tests skipped (pandas not installed)")
+
+    return True
+
+
 def test_label_conversion_detailed():
     """Test Label to ID Conversion - Detailed Examples"""
     print("\n=== Testing Label to ID Conversion - Detailed Examples ===")
@@ -375,6 +456,7 @@ def main():
         ("Quick Start - Label Conversion", test_quick_start_label_conversion),
         ("Quick Start - Annotations", test_quick_start_annotations),
         ("ID Conversion Formats", test_id_conversion_formats),
+        ("Report Options", test_report_options),
         ("ID Conversion with Annotations", test_convert_with_annotations),
         ("ID Conversion with Filtering", test_convert_with_filtering),
         ("Get Orthologs", test_get_ortholog),
