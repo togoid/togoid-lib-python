@@ -55,6 +55,10 @@ Examples:
                                 default='json', help='Output format (default: json)')
     convert_parser.add_argument('--limit', type=int, help='Limit number of results')
     convert_parser.add_argument('--offset', type=int, help='Offset for results')
+    convert_parser.add_argument('--annotate', action='append', nargs=2, metavar=('DATASET', 'FIELD'),
+                                help='Add annotation column (dataset field). Can be used multiple times.')
+    convert_parser.add_argument('--filter', action='append', nargs=3, metavar=('DATASET', 'FIELD', 'VALUES'),
+                                help='Filter by annotation value (dataset field values). Values should be comma-separated.')
     convert_parser.add_argument('--output', help='Output file path')
 
     # ========== LABEL2ID subcommand ==========
@@ -154,6 +158,15 @@ Examples:
     config_subparsers.add_parser('statistics', help='Get database statistics')
     config_subparsers.add_parser('taxonomy', help='Get taxonomy list')
 
+    # ========== GET-ORTHOLOG subcommand ==========
+    ortholog_parser = subparsers.add_parser('get-ortholog', help='Get orthologs via round-trip conversion')
+    ortholog_parser.add_argument('--ids', required=True, help='Comma-separated source IDs')
+    ortholog_parser.add_argument('--route', required=True, help='Comma-separated route (e.g., "ncbigene,homologene")')
+    ortholog_parser.add_argument('--target-taxids', required=True, help='Comma-separated target taxonomy IDs (e.g., "10090,10116")')
+    ortholog_parser.add_argument('--format', choices=['json', 'csv', 'tsv', 'dict', 'table', 'dataframe'],
+                                 default='table', help='Output format (default: table)')
+    ortholog_parser.add_argument('--output', help='Output file path')
+
     return parser
 
 
@@ -162,11 +175,27 @@ def handle_convert(args, converter: TogoIDConverter):
     route = [r.strip() for r in args.route.split(',')]
     ids = [i.strip() for i in args.ids.split(',')]
 
-    kwargs = {'report': args.report, 'format': args.format}
+    kwargs = {'format': args.format}
     if args.limit is not None:
         kwargs['limit'] = args.limit
     if args.offset is not None:
         kwargs['offset'] = args.offset
+
+    # Handle annotate option
+    if args.annotate:
+        kwargs['annotate'] = [(dataset, field) for dataset, field in args.annotate]
+
+    # Handle filter option
+    if args.filter:
+        filter_list = []
+        for dataset, field, values in args.filter:
+            value_list = [v.strip() for v in values.split(',')]
+            filter_list.append((dataset, field, value_list))
+        kwargs['filter'] = filter_list
+
+    # Set report parameter (automatically set to 'full' if annotate/filter used)
+    if not (args.annotate or args.filter):
+        kwargs['report'] = args.report
 
     result = converter.convert(route, ids, **kwargs)
 
@@ -174,11 +203,17 @@ def handle_convert(args, converter: TogoIDConverter):
         with open(args.output, 'w', encoding='utf-8') as f:
             if isinstance(result, str):
                 f.write(result)
+            elif args.format == 'table':
+                for row in result:
+                    f.write('\t'.join(str(cell) for cell in row) + '\n')
             else:
                 json.dump(result, f, indent=2, ensure_ascii=False)
     else:
         if isinstance(result, str):
             print(result)
+        elif args.format == 'table':
+            for row in result:
+                print('\t'.join(str(cell) for cell in row))
         else:
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -213,6 +248,38 @@ def handle_label2id(args):
     # Output results
     output_results(results, args.format, args.output)
     return 0
+
+
+def handle_get_ortholog(args, converter: TogoIDConverter):
+    """Handle get-ortholog command"""
+    ids = [i.strip() for i in args.ids.split(',')]
+    route = [r.strip() for r in args.route.split(',')]
+    target_taxids = [t.strip() for t in args.target_taxids.split(',')]
+
+    result = converter.get_ortholog(
+        ids=ids,
+        route=route,
+        target_taxids=target_taxids,
+        format=args.format
+    )
+
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8') as f:
+            if isinstance(result, str):
+                f.write(result)
+            elif args.format == 'table':
+                for row in result:
+                    f.write('\t'.join(str(cell) for cell in row) + '\n')
+            else:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+    else:
+        if isinstance(result, str):
+            print(result)
+        elif args.format == 'table':
+            for row in result:
+                print('\t'.join(str(cell) for cell in row))
+        else:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 def handle_annotate(args, api_url: str):
@@ -349,6 +416,10 @@ def main():
             ids = [i.strip() for i in args.ids.split(',')]
             result = converter.count(args.src, args.dst, ids, args.link)
             print(json.dumps(result, indent=2, ensure_ascii=False))
+
+        elif args.command == 'get-ortholog':
+            converter = TogoIDConverter(api_base_url=api_url)
+            return handle_get_ortholog(args, converter)
 
         elif args.command == 'config':
             converter = TogoIDConverter(api_base_url=api_url)
