@@ -154,14 +154,13 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
   --filter ensembl_transcript transcript_flag "MANE Select"
 
 # Get Orthologs
-togoid get-ortholog --ids 1,9 \
+togoid get-ortholog --ids 672,7157 \
   --route ncbigene,homologene \
   --target-taxids 10090,10116 \
   --format table
 
 # Label to ID Conversion
 togoid label2id --labels "BRCA1,TP53,EGFR" --dataset ncbigene --taxonomy 9606
-togoid label2id --labels "caffeine" --dataset chebi --label_types "togoid_chebi_label"
 
 # Get Annotations
 togoid annotate --dataset ncbigene --ids 672,7157 \
@@ -171,16 +170,9 @@ togoid annotate --dataset ncbigene --ids 672,7157 \
 # List available annotation fields
 togoid annotate --dataset ncbigene --list-fields
 
-# With filtering
-togoid annotate --dataset ncbigene --ids 672,7157 \
-  --field type_of_gene \
-  --filter type_of_gene=protein-coding
-
-# Configuration and Discovery
+# Configuration
 togoid config dataset ncbigene
 togoid config descriptions
-togoid search databases uniprot
-togoid route ncbigene ensembl_gene
 togoid count ncbigene ensembl_gene --ids 1,9
 ```
 
@@ -487,22 +479,17 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
 
 # Label to ID conversion
 togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
-togoid label2id --labels "caffeine" --dataset chebi
 
 # Get annotations
 togoid annotate --dataset ncbigene --ids 672,7157 --field label --field gene_synonym
 togoid annotate --dataset ncbigene --list-fields
 
-# Search and discovery
-togoid search databases gene
-togoid route ncbigene ensembl_gene
-togoid lookup ncbigene 1
+# Utilities
 togoid count ncbigene ensembl_gene --ids 1,9
 
 # Configuration
 togoid config dataset ncbigene
 togoid config descriptions
-togoid config taxonomy
 ```
 
 ### Advanced Features
