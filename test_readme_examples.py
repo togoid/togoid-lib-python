@@ -9,6 +9,32 @@ import sys
 import os
 from typing import List, Dict, Any
 
+import requests
+from requests.exceptions import RequestException
+
+# Quick connectivity guard so the README example tests can be skipped cleanly
+API_CHECKED = False
+API_AVAILABLE = False
+
+
+def ensure_api_available() -> bool:
+    """Return False quickly if external APIs are unreachable."""
+    global API_CHECKED, API_AVAILABLE
+    if API_CHECKED:
+        return API_AVAILABLE
+
+    API_CHECKED = True
+    try:
+        # Lightweight reachability checks; status code does not matter here
+        requests.get("https://api.togoid.dbcls.jp/config/descriptions", timeout=5)
+        requests.post("https://dx.dbcls.jp/grasp-dev-togoid", json={"ping": True}, timeout=5)
+        API_AVAILABLE = True
+    except RequestException as e:
+        print(f"⚠ TogoID API endpoints are not reachable: {e}")
+        API_AVAILABLE = False
+
+    return API_AVAILABLE
+
 
 def test_quick_start_id_conversion():
     """Test Quick Start - ID Conversion examples"""
@@ -336,6 +362,10 @@ def test_api_methods():
 
 def main():
     """Run all tests"""
+    if not ensure_api_available():
+        print("\nAPI not reachable; skipping README example tests.")
+        return 0
+
     print("=" * 60)
     print("Testing README.md Examples")
     print("=" * 60)
