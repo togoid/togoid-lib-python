@@ -134,29 +134,54 @@ annotations = annotator.execute_query(
 ### As a Command-Line Tool
 
 ```bash
-# Convert IDs
-python -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene
+# Basic ID Conversion
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
-# or using the togoid command (after installation)
+# Convert with different output formats
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format table
 
-# Convert labels to IDs
+# ID Conversion with Annotations
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label \
+  --annotate ncbigene full_name
+
+# ID Conversion with Filtering
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label \
+  --filter ensembl_transcript transcript_flag "MANE Select"
+
+# Get Orthologs
+togoid get-ortholog --ids 1,9 \
+  --route ncbigene,homologene \
+  --target-taxids 10090,10116 \
+  --format table
+
+# Label to ID Conversion
 togoid label2id --labels "BRCA1,TP53,EGFR" --dataset ncbigene --taxonomy 9606
+togoid label2id --labels "caffeine" --dataset chebi --label_types "togoid_chebi_label"
 
-# Get annotations
-togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym --field full_name
+# Get Annotations
+togoid annotate --dataset ncbigene --ids 672,7157 \
+  --field gene_synonym \
+  --field full_name
 
 # List available annotation fields
 togoid annotate --dataset ncbigene --list-fields
 
-# Search databases
-togoid search databases uniprot
+# With filtering
+togoid annotate --dataset ncbigene --ids 672,7157 \
+  --field type_of_gene \
+  --filter type_of_gene=protein-coding
 
-# Find routes
-togoid route ncbigene ensembl_gene
-
-# Get configuration
+# Configuration and Discovery
 togoid config dataset ncbigene
+togoid config descriptions
+togoid search databases uniprot
+togoid route ncbigene ensembl_gene
+togoid count ncbigene ensembl_gene --ids 1,9
 ```
 
 ## Usage Examples
@@ -450,6 +475,128 @@ Main class for getting annotations and labels for IDs.
 - `list_fields(dataset_name)` - List available annotation fields
 - `execute_query(dataset_name, ids, fields, filters)` - Execute GraphQL query to get annotations
 - `build_rows(dataset_label, fields, field_meta, records, filters, compact)` - Build table rows from query results
+
+## CLI Command Reference
+
+### Basic Commands
+
+```bash
+# Convert IDs between databases
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
+
+# Label to ID conversion
+togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
+togoid label2id --labels "caffeine" --dataset chebi
+
+# Get annotations
+togoid annotate --dataset ncbigene --ids 672,7157 --field label --field gene_synonym
+togoid annotate --dataset ncbigene --list-fields
+
+# Search and discovery
+togoid search databases gene
+togoid route ncbigene ensembl_gene
+togoid lookup ncbigene 1
+togoid count ncbigene ensembl_gene --ids 1,9
+
+# Configuration
+togoid config dataset ncbigene
+togoid config descriptions
+togoid config taxonomy
+```
+
+### Advanced Features
+
+#### ID Conversion with Annotations
+
+Add annotation columns to your conversion results:
+
+```bash
+# Add single annotation
+togoid convert --ids 1,9 \
+  --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label
+
+# Add multiple annotations
+togoid convert --ids 1,9 \
+  --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label \
+  --annotate ncbigene full_name \
+  --annotate ensembl_transcript transcript_flag
+```
+
+#### ID Conversion with Filtering
+
+Filter results by annotation values:
+
+```bash
+# Filter by single value
+togoid convert --ids 1,9 \
+  --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --filter ensembl_transcript transcript_flag "MANE Select"
+
+# Combine annotations and filtering
+togoid convert --ids 1,9 \
+  --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label \
+  --filter ensembl_transcript transcript_flag "MANE Select"
+```
+
+#### Ortholog Retrieval
+
+Get orthologs using round-trip conversion:
+
+```bash
+# Get mouse and rat orthologs for human genes
+togoid get-ortholog \
+  --ids 672,7157 \
+  --route ncbigene,homologene \
+  --target-taxids 10090,10116 \
+  --format table
+
+# Output as JSON
+togoid get-ortholog \
+  --ids 672,7157 \
+  --route ncbigene,homologene \
+  --target-taxids 10090 \
+  --format json
+```
+
+### Input/Output Options
+
+```bash
+# Read IDs from file
+echo "1\n9\n672" > ids.txt
+togoid convert --ids-file ids.txt --route ncbigene,ensembl_gene
+
+# Save output to file
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --output result.json
+
+# Different output formats
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format json
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format table
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format csv
+```
+
+### Report Options
+
+Control what information is returned:
+
+```bash
+# Only target IDs (default)
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report target
+
+# Source-target pairs
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair
+
+# Full path including intermediate IDs
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript --report full
+```
 
 ## Configuration
 
