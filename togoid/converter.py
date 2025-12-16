@@ -372,8 +372,23 @@ class TogoIDConverter:
         # Convert to table format first
         table_data = self._convert_to_table(response)
 
-        # Create DataFrame
-        df = pd.DataFrame(table_data, columns=['source_id', 'target_id'])
+        # Create DataFrame with appropriate column names based on data
+        if not table_data:
+            # Empty result
+            df = pd.DataFrame(columns=['source_id', 'target_id'])
+        else:
+            num_cols = len(table_data[0]) if table_data else 0
+            if num_cols == 1:
+                # Only target IDs (report='target')
+                df = pd.DataFrame(table_data, columns=['target_id'])
+            elif num_cols == 2:
+                # Source and target IDs
+                df = pd.DataFrame(table_data, columns=['source_id', 'target_id'])
+            else:
+                # Multiple columns (with annotations, intermediate IDs, etc.)
+                # Generate column names dynamically
+                col_names = ['source_id'] + [f'col_{i}' for i in range(1, num_cols)]
+                df = pd.DataFrame(table_data, columns=col_names)
         return df
 
     def count(self, src: str, dst: str, ids: List[str], link: Optional[str] = None) -> Dict:
