@@ -193,6 +193,7 @@ orthologs = converter.get_ortholog(
     route=["ncbigene", "homologene"],
     target_taxids=["10090", "10116"]  # Mouse and Rat
 )
+# Table rows: [source_id, homologene_id, target_gene_id, taxonomy_id]
 
 
 ===============================================================================

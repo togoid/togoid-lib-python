@@ -391,8 +391,8 @@ def test_get_ortholog():
         target_taxids=["10090", "10116"]     # Mouse and Rat
     )
     assert len(result) > 0, "No orthologs found"
-    assert len(result[0]) == 3, f"Expected 3 columns, got {len(result[0])}"
-    print(f"✓ Orthologs: {len(result)} results")
+    assert len(result[0]) == 4, f"Expected 4 columns, got {len(result[0])}"
+    print(f"✓ Orthologs: {len(result)} results (source, homologene, target, taxid)")
     for row in result:
         print(f"  {row}")
 

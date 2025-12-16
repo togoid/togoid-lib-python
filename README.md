@@ -260,11 +260,12 @@ result = converter.get_ortholog(
     target_taxids=["10090", "10116"]     # Mouse and Rat
 )
 # Returns: [
-#   ['11167', '117586', '10090'],  # homologene_id, mouse_gene_id, taxid
-#   ['11167', '140656', '10116'],  # homologene_id, rat_gene_id, taxid
-#   ['37329', '116632', '10116'],
-#   ['37329', '17961', '10090']
+#   ['1', '11167', '117586', '10090'],   # source_id, homologene_id, mouse_gene_id, taxid
+#   ['1', '11167', '140656', '10116'],   # same source via same homologene group
+#   ['9', '37329', '116632', '10116'],
+#   ['9', '37329', '17961', '10090']
 # ]
+# Rows are ordered as: [source_id, homologene_id, target_gene_id, taxonomy_id]
 ```
 
 #### Search and Route
@@ -552,6 +553,8 @@ togoid get-ortholog \
   --target-taxids 10090 \
   --format json
 ```
+
+Table output columns are `[source_id, homologene_id, target_id, taxonomy_id]`.
 
 ### Input/Output Options
 

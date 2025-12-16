@@ -541,7 +541,10 @@ class TogoIDConverter:
             format: Output format - 'table' (default), 'dict', or 'json'
 
         Returns:
-            Filtered ortholog results in specified format
+            Filtered ortholog results in specified format. Table format returns
+            rows in the order: [source_id, intermediate_id, target_id, taxonomy_id].
+            Dict format maps each source_id to a list of
+            (intermediate_id, target_id, taxonomy_id) tuples.
 
         Example:
             >>> converter = TogoIDConverter()
@@ -556,12 +559,13 @@ class TogoIDConverter:
         forward_result = self.convert(
             ids=ids,
             route=route,
-            format='json'
+            format='json',
+            report='pair'
         )
 
-        # Extract intermediate IDs
-        intermediate_ids = forward_result.get('results', [])
-        if not intermediate_ids:
+        # Extract intermediate IDs and keep mapping back to original IDs
+        forward_pairs = forward_result.get('results', [])
+        if not forward_pairs:
             # No results from forward conversion
             if format == 'dict':
                 return {}
@@ -569,6 +573,22 @@ class TogoIDConverter:
                 return []
             else:
                 return {'results': []}
+
+        intermediate_ids: List[str] = []
+        intermediate_to_sources: Dict[str, List[str]] = {}
+        intermediate_seen = set()
+
+        for pair in forward_pairs:
+            if isinstance(pair, list) and len(pair) >= 2:
+                source_id = str(pair[0])
+                intermediate_id = str(pair[1])
+                if intermediate_id not in intermediate_seen:
+                    intermediate_ids.append(intermediate_id)
+                    intermediate_seen.add(intermediate_id)
+
+                if intermediate_id not in intermediate_to_sources:
+                    intermediate_to_sources[intermediate_id] = []
+                intermediate_to_sources[intermediate_id].append(source_id)
 
         # Step 2: Reverse conversion (e.g., homologene -> ncbigene)
         reverse_route = list(reversed(route))
@@ -627,20 +647,23 @@ class TogoIDConverter:
             for target_id in target_id_list:
                 taxonomy_id = target_to_taxonomy.get(target_id)
                 if taxonomy_id in target_taxids:
-                    # Include this result
-                    filtered_results.append([intermediate_id, target_id, taxonomy_id])
+                    source_ids = intermediate_to_sources.get(intermediate_id, [])
+                    if not source_ids:
+                        # Should not happen, but keep explicit placeholder
+                        filtered_results.append(["", intermediate_id, target_id, taxonomy_id])
+                        continue
+                    for source_id in source_ids:
+                        filtered_results.append([source_id, intermediate_id, target_id, taxonomy_id])
 
         # Format output
         if format == 'dict':
             # Group by intermediate_id
-            result_dict: Dict[str, List[Tuple[str, str]]] = {}
+            result_dict: Dict[str, List[Tuple[str, str, str]]] = {}
             for row in filtered_results:
-                intermediate_id = row[0]
-                target_id = row[1]
-                taxonomy_id = row[2]
-                if intermediate_id not in result_dict:
-                    result_dict[intermediate_id] = []
-                result_dict[intermediate_id].append((target_id, taxonomy_id))
+                source_id, intermediate_id, target_id, taxonomy_id = row
+                if source_id not in result_dict:
+                    result_dict[source_id] = []
+                result_dict[source_id].append((intermediate_id, target_id, taxonomy_id))
             return result_dict
         elif format == 'table':
             return filtered_results
