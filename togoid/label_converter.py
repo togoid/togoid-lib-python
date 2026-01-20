@@ -16,6 +16,12 @@ from typing import Dict, List, Optional, Any
 
 import requests
 
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
 
 class LabelConverter:
     """Convert labels to IDs using external APIs"""
@@ -284,7 +290,8 @@ class LabelConverter:
         threshold: float = 0.5,
         preferred_dictionary: Optional[str] = None,
         taxonomy: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        format: str = 'json',
+    ) -> Any:
         """
         Convert labels to IDs - automatically selects API based on dataset configuration
 
@@ -298,9 +305,10 @@ class LabelConverter:
             threshold: Matching score threshold for PubDict (0-1)
             preferred_dictionary: Preferred dictionary for PubDict synonym resolution
             taxonomy: Taxonomy ID for SPARQList (e.g., "9606" for human)
+            format: Output format - 'json' (default) or 'dataframe'
 
         Returns:
-            List of result dictionaries
+            List of result dictionaries (json format) or pandas DataFrame (dataframe format)
         """
         if self._should_use_sparqlist_for_dataset(dataset):
             # Get SPARQList endpoint from dataset config
@@ -321,7 +329,7 @@ class LabelConverter:
                 self._log(f"Using label_types from dataset config: {label_types}")
 
             self._log(f"Using SPARQList API for dataset '{dataset}'")
-            return self.convert_sparqlist(
+            results = self.convert_sparqlist(
                 labels=labels,
                 sparqlist=sparqlist_endpoint,
                 label_types=label_types,
@@ -347,13 +355,26 @@ class LabelConverter:
                 self._log(f"Using dictionaries from dataset config: {label_types}")
 
             self._log(f"Using PubDictionaries API for dataset '{dataset}'")
-            return self.convert_pubdictionaries(
+            results = self.convert_pubdictionaries(
                 labels=labels,
                 dictionaries=label_types,
                 tags=tags,
                 threshold=threshold,
                 preferred_dictionary=preferred_dictionary,
             )
+
+        # Convert to dataframe if requested
+        if format == 'dataframe':
+            if not PANDAS_AVAILABLE:
+                raise ImportError(
+                    "pandas is required for dataframe format. "
+                    "Install with: pip install pandas"
+                )
+            if not results:
+                return pd.DataFrame()
+            return pd.DataFrame(results)
+        else:
+            return results
 
 
 def parse_labels(label_input: str) -> List[str]:
