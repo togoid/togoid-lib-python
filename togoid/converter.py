@@ -575,6 +575,43 @@ class TogoIDConverter:
         """
         return self._make_request('/config/taxonomy')
 
+    def config_list_targets(self, source: str) -> List[str]:
+        """
+        Get list of datasets reachable from the specified source dataset in one hop
+
+        Args:
+            source: Source dataset name (e.g., "ncbigene")
+
+        Returns:
+            List of target dataset names reachable from the source
+
+        Example:
+            >>> converter = TogoIDConverter()
+            >>> targets = converter.config_list_targets(source="ncbigene")
+            >>> print(targets)
+            ['ensembl_gene', 'ensembl_protein', 'ensembl_transcript', ...]
+        """
+        # Get all relation configurations
+        relations = self.config_relation()
+
+        targets = []
+
+        # Parse each relation key
+        for relation_key in relations.keys():
+            # Split key by "-"
+            parts = relation_key.split('-')
+
+            # Check if it's a valid format (2 parts)
+            if len(parts) == 2:
+                src, dst = parts
+
+                # If source matches, add target to list
+                if src == source:
+                    targets.append(dst)
+
+        # Remove duplicates and sort
+        return sorted(set(targets))
+
     def get_ortholog(
         self,
         ids: List[str],
