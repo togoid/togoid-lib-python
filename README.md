@@ -71,7 +71,7 @@ result = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"])
 
 # Dict format
 result_dict = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dict")
-# Output: {"1": ["ENSG00000121410"], "9": ["ENSG00000075624"]}
+# Output: {'ids': ['1', '9'], 'route': ['ncbigene', 'ensembl_gene'], 'results': {'1': ['ENSG00000121410'], '9': ['ENSG00000171428']}}
 
 # Table format
 result_table = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="table")
@@ -193,7 +193,7 @@ json_result = converter.convert(
     route=["ncbigene", "ensembl_gene"]
 )
 
-# Dict - {source_id: [target_ids]} mapping
+# Dict - Includes ids, route, and results mapping {source_id: [target_ids]}
 dict_result = converter.convert(
     ids=["1", "9"],
     route=["ncbigene", "ensembl_gene"],

@@ -189,21 +189,35 @@ class TogoIDConverter:
                 if not passes_filter:
                     continue
 
-                # Add annotation columns
-                new_row = list(row)
+                # Add annotation columns right after their corresponding dataset column
                 if annotate:
+                    # Build a mapping of dataset_index -> list of annotation values to insert after that index
+                    annotations_to_insert = {}
                     for dataset_name, field_name in annotate:
                         dataset_index = route.index(dataset_name)
+                        if dataset_index not in annotations_to_insert:
+                            annotations_to_insert[dataset_index] = []
+
                         if len(row) > dataset_index:
                             id_value = str(row[dataset_index])
                             annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
                             # Handle list values
                             if isinstance(annotation_value, list):
                                 annotation_value = ", ".join(str(v) for v in annotation_value)
-                            new_row.append(str(annotation_value))
+                            annotations_to_insert[dataset_index].append(str(annotation_value))
                         else:
-                            new_row.append("")
-                annotated_table.append(new_row)
+                            annotations_to_insert[dataset_index].append("")
+
+                    # Build new row by inserting annotations after their dataset columns
+                    new_row = []
+                    for i, cell in enumerate(row):
+                        new_row.append(cell)
+                        # Insert annotations for this column if any
+                        if i in annotations_to_insert:
+                            new_row.extend(annotations_to_insert[i])
+                    annotated_table.append(new_row)
+                else:
+                    annotated_table.append(list(row))
             else:
                 annotated_table.append(row)
 
@@ -237,9 +251,9 @@ class TogoIDConverter:
         Returns:
             Conversion results in the specified format:
             - 'json': Raw API response (default)
-            - 'dict': Dictionary mapping source IDs to target IDs
-            - 'table': 2D array (list of lists) with [source_id, target_id] pairs (with annotations if specified)
-            - 'dataframe': pandas DataFrame with 'source_id' and 'target_id' columns (with annotations if specified)
+            - 'dict': Dictionary with 'ids', 'route', and 'results' (mapping source IDs to target IDs)
+            - 'table': 2D array (list of lists) with [source_id, target_id, ...] pairs (with annotations if specified)
+            - 'dataframe': pandas DataFrame with dataset name columns (with annotations if specified)
         """
         params = {
             'route': ','.join(route),
@@ -247,9 +261,12 @@ class TogoIDConverter:
         }
         params.update(kwargs)
 
-        # If annotations or filters requested, ensure we get full report format
-        if (annotate or filter) and 'report' not in params:
-            params['report'] = 'full'
+        # Set report parameter based on format and whether annotations/filters are requested
+        if 'report' not in params:
+            if annotate or filter:
+                params['report'] = 'full'
+            elif format in ('dict', 'table', 'dataframe'):
+                params['report'] = 'pair'
 
         # Get API response
         response = self._make_request('/convert', 'GET', params=params)
@@ -260,44 +277,70 @@ class TogoIDConverter:
 
         # Transform based on format
         if format == 'dict':
-            return self._convert_to_dict(response)
+            return self._convert_to_dict(response, route)
         elif format == 'table':
             return self._convert_to_table(response)
         elif format == 'dataframe':
-            return self._convert_to_dataframe(response)
+            return self._convert_to_dataframe(response, route, annotate)
         else:  # format == 'json' or any other value
             return response
 
-    def _convert_to_dict(self, response: Any) -> Dict[str, List[str]]:
+    def _convert_to_dict(self, response: Any, route: List[str]) -> Dict[str, Any]:
         """
         Convert API response to dictionary format
 
         Args:
             response: API response (can be list or dict)
+            route: Conversion route
 
         Returns:
-            Dictionary mapping source IDs to list of target IDs
+            Dictionary with 'ids', 'route', and 'results' (mapping source IDs to list of target IDs)
         """
-        result = {}
+        result_mapping = {}
 
+        # Handle TogoID API response format with 'results' key
+        if isinstance(response, dict) and 'results' in response:
+            results_data = response['results']
+            ids = response.get('ids', [])
+
+            if isinstance(results_data, list):
+                for item in results_data:
+                    if isinstance(item, list) and len(item) >= 2:
+                        source_id = str(item[0])
+                        target_id = str(item[1])
+                        if source_id not in result_mapping:
+                            result_mapping[source_id] = []
+                        result_mapping[source_id].append(target_id)
+
+            return {
+                'ids': ids,
+                'route': route,
+                'results': result_mapping
+            }
+
+        # Handle simple list format
         if isinstance(response, list):
             # Handle list format (e.g., [[source, target], ...])
             for item in response:
                 if isinstance(item, list) and len(item) >= 2:
                     source_id = str(item[0])
                     target_id = str(item[1])
-                    if source_id not in result:
-                        result[source_id] = []
-                    result[source_id].append(target_id)
+                    if source_id not in result_mapping:
+                        result_mapping[source_id] = []
+                    result_mapping[source_id].append(target_id)
         elif isinstance(response, dict):
-            # Handle dictionary format
+            # Handle dictionary format (not TogoID API format)
             for source_id, targets in response.items():
                 if isinstance(targets, list):
-                    result[str(source_id)] = [str(t) for t in targets]
+                    result_mapping[str(source_id)] = [str(t) for t in targets]
                 else:
-                    result[str(source_id)] = [str(targets)]
+                    result_mapping[str(source_id)] = [str(targets)]
 
-        return result
+        return {
+            'ids': [],
+            'route': route,
+            'results': result_mapping
+        }
 
     def _convert_to_table(self, response: Any) -> List[List[str]]:
         """
@@ -350,15 +393,22 @@ class TogoIDConverter:
 
         return result
 
-    def _convert_to_dataframe(self, response: Any):
+    def _convert_to_dataframe(
+        self,
+        response: Any,
+        route: List[str],
+        annotate: Optional[List[Tuple[str, str]]] = None
+    ):
         """
         Convert API response to pandas DataFrame format
 
         Args:
             response: API response (can be list or dict)
+            route: Conversion route (list of dataset names)
+            annotate: Optional list of (dataset_name, field_name) tuples for annotations
 
         Returns:
-            pandas DataFrame with 'source_id' and 'target_id' columns
+            pandas DataFrame with dataset name columns and annotation columns
 
         Raises:
             ImportError: If pandas is not installed
@@ -374,21 +424,28 @@ class TogoIDConverter:
 
         # Create DataFrame with appropriate column names based on data
         if not table_data:
-            # Empty result
-            df = pd.DataFrame(columns=['source_id', 'target_id'])
+            # Empty result - use route names as columns
+            df = pd.DataFrame(columns=route)
         else:
             num_cols = len(table_data[0]) if table_data else 0
-            if num_cols == 1:
-                # Only target IDs (report='target')
-                df = pd.DataFrame(table_data, columns=['target_id'])
-            elif num_cols == 2:
-                # Source and target IDs
-                df = pd.DataFrame(table_data, columns=['source_id', 'target_id'])
-            else:
-                # Multiple columns (with annotations, intermediate IDs, etc.)
-                # Generate column names dynamically
-                col_names = ['source_id'] + [f'col_{i}' for i in range(1, num_cols)]
+
+            if annotate:
+                # With annotations: use route names + annotation column names
+                col_names = route.copy()
+                for dataset_name, field_name in annotate:
+                    col_names.append(f"{dataset_name} {field_name}")
                 df = pd.DataFrame(table_data, columns=col_names)
+            else:
+                # Without annotations: use route names
+                if num_cols == len(route):
+                    df = pd.DataFrame(table_data, columns=route)
+                elif num_cols < len(route):
+                    # Fewer columns than route (e.g., only target IDs)
+                    df = pd.DataFrame(table_data, columns=route[:num_cols])
+                else:
+                    # More columns than route (shouldn't happen, but handle it)
+                    col_names = route + [f'col_{i}' for i in range(len(route), num_cols)]
+                    df = pd.DataFrame(table_data, columns=col_names)
         return df
 
     def count(self, src: str, dst: str, ids: List[str], link: Optional[str] = None) -> Dict:
@@ -538,13 +595,14 @@ class TogoIDConverter:
             ids: List of source IDs
             route: Conversion route (e.g., ["ncbigene", "homologene"])
             target_taxids: List of taxonomy IDs to filter by (e.g., ["10090", "10116"])
-            format: Output format - 'table' (default), 'dict', or 'json'
+            format: Output format - 'table' (default), 'dict', 'dataframe', or 'json'
 
         Returns:
             Filtered ortholog results in specified format. Table format returns
             rows in the order: [source_id, intermediate_id, target_id, taxonomy_id].
             Dict format maps each source_id to a list of
             (intermediate_id, target_id, taxonomy_id) tuples.
+            DataFrame format returns a pandas DataFrame with columns based on the route.
 
         Example:
             >>> converter = TogoIDConverter()
@@ -667,6 +725,17 @@ class TogoIDConverter:
             return result_dict
         elif format == 'table':
             return filtered_results
+        elif format == 'dataframe':
+            if not PANDAS_AVAILABLE:
+                raise ImportError(
+                    "pandas is required for dataframe format. "
+                    "Install with: pip install pandas"
+                )
+            # Column names: source dataset, intermediate dataset, target dataset, taxonomy
+            col_names = [route[0], route[-1], route[0], 'taxonomy']
+            if not filtered_results:
+                return pd.DataFrame(columns=col_names)
+            return pd.DataFrame(filtered_results, columns=col_names)
         else:  # json
             return {
                 'ids': ids,
