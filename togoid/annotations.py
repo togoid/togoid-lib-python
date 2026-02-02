@@ -145,8 +145,11 @@ class AnnotationsConverter:
         dataset_name: str,
         ids: List[str],
         fields: Iterable[str],
-        filters: Dict[str, List[str]],
+        filters: Optional[Dict[str, List[str]]] = None,
     ) -> Dict[str, Dict[str, Any]]:
+        if filters is None:
+            filters = {}
+
         deduped_ids = list(dict.fromkeys(ids))
         if not deduped_ids:
             raise ValueError("At least one identifier is required.")

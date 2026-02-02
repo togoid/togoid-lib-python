@@ -218,7 +218,7 @@ class LabelConverter:
         self,
         labels: List[str],
         sparqlist: str,
-        label_types: str,
+        label_types: List[str],
         taxonomy: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -227,7 +227,7 @@ class LabelConverter:
         Args:
             labels: List of labels to search
             sparqlist: SPARQList endpoint name
-            label_types: Comma-separated label types
+            label_types: List of label types (e.g., ["symbol", "synonym"])
             taxonomy: Taxonomy ID (e.g., "9606" for human)
 
         Returns:
@@ -239,7 +239,7 @@ class LabelConverter:
 
         params = {
             "labels": ",".join(labels),
-            "label_types": label_types,
+            "label_types": ",".join(label_types),
         }
         if taxonomy:
             params["taxon"] = taxonomy
@@ -285,7 +285,7 @@ class LabelConverter:
         self,
         labels: List[str],
         dataset: str,
-        label_types: Optional[str] = None,
+        label_types: Optional[List[str]] = None,
         tags: Optional[str] = None,
         threshold: float = 0.5,
         preferred_dictionary: Optional[str] = None,
@@ -298,9 +298,9 @@ class LabelConverter:
         Args:
             labels: List of labels to search
             dataset: Dataset name to determine API endpoint
-            label_types: Label types or dictionary names (if None, uses dataset config)
-                        - For SPARQList: comma-separated label types (e.g., "symbol,synonym")
-                        - For PubDictionaries: comma-separated dictionary names (e.g., "togoid_chebi_label")
+            label_types: List of label types (if None, uses dataset config)
+                        - For SPARQList: list of label types (e.g., ["symbol", "synonym"])
+                        - For PubDictionaries: list of dictionary names (e.g., ["togoid_chebi_label"])
             tags: Taxonomy tags for PubDict (e.g., "9606" for human)
             threshold: Matching score threshold for PubDict (0-1)
             preferred_dictionary: Preferred dictionary for PubDict synonym resolution
@@ -322,10 +322,10 @@ class LabelConverter:
                 # Extract label_type values from dataset config
                 label_type_configs = label_resolver.get("label_types", [])
                 if label_type_configs:
-                    label_types = ",".join([lt["label_type"] for lt in label_type_configs])
+                    label_types = [lt["label_type"] for lt in label_type_configs]
                 else:
                     # Fallback default
-                    label_types = "symbol,synonym"
+                    label_types = ["symbol", "synonym"]
                 self._log(f"Using label_types from dataset config: {label_types}")
 
             self._log(f"Using SPARQList API for dataset '{dataset}'")
@@ -346,10 +346,10 @@ class LabelConverter:
                 # Extract dictionary names from dataset config
                 dictionary_configs = label_resolver.get("dictionaries", [])
                 if dictionary_configs:
-                    label_types = ",".join([d["dictionary"] for d in dictionary_configs])
+                    label_types = [d["dictionary"] for d in dictionary_configs]
                 else:
                     raise ValueError(
-                        f"The --label_types argument is required for dataset '{dataset}' "
+                        f"The label_types argument is required for dataset '{dataset}' "
                         "which does not have dictionary configuration"
                     )
                 self._log(f"Using dictionaries from dataset config: {label_types}")
@@ -357,7 +357,7 @@ class LabelConverter:
             self._log(f"Using PubDictionaries API for dataset '{dataset}'")
             results = self.convert_pubdictionaries(
                 labels=labels,
-                dictionaries=label_types,
+                dictionaries=",".join(label_types),
                 tags=tags,
                 threshold=threshold,
                 preferred_dictionary=preferred_dictionary,
