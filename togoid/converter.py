@@ -64,6 +64,10 @@ class TogoIDConverter:
             else:
                 return resp.text
 
+        except requests.exceptions.HTTPError as e:
+            # Include status code in error for better handling
+            status_code = e.response.status_code if hasattr(e, 'response') else 'Unknown'
+            raise RuntimeError(f"API Error ({status_code}): {e}") from e
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"API Error: {e}") from e
 
@@ -268,8 +272,31 @@ class TogoIDConverter:
             elif format in ('dict', 'table', 'dataframe'):
                 params['report'] = 'pair'
 
-        # Get API response
-        response = self._make_request('/convert', 'GET', params=params)
+        # Get API response with route suggestion on error
+        try:
+            response = self._make_request('/convert', 'GET', params=params)
+        except RuntimeError as e:
+            # Check if it's a connection error (400 Bad Request or similar)
+            error_str = str(e)
+            if ('400' in error_str or 'Bad Request' in error_str) and len(route) == 2:
+                # Try to find alternative routes for 2-dataset conversions
+                src, dst = route
+                suggested_routes = self._find_alternative_routes(src, dst)
+
+                if suggested_routes:
+                    route_strs = [' -> '.join(r) for r in suggested_routes]
+                    raise RuntimeError(
+                        f"No direct connection between '{src}' and '{dst}'. "
+                        f"Try one of these routes instead:\n" +
+                        '\n'.join(f"  - {rs}" for rs in route_strs)
+                    ) from e
+                else:
+                    raise RuntimeError(
+                        f"No connection found between '{src}' and '{dst}'. "
+                        f"These datasets may not be connected in the TogoID database."
+                    ) from e
+            # Re-raise other errors
+            raise
 
         # If annotations or filters requested, add them to the response
         if (annotate or filter) and format in ('table', 'dataframe'):
@@ -631,6 +658,84 @@ class TogoIDConverter:
 
         # Remove duplicates and sort
         return sorted(set(targets))
+
+    def _find_alternative_routes(
+        self,
+        src: str,
+        dst: str,
+        max_hops: int = 3,
+        max_results: int = 5
+    ) -> List[List[str]]:
+        """
+        Find alternative routes between two datasets
+
+        Args:
+            src: Source dataset name
+            dst: Destination dataset name
+            max_hops: Maximum number of hops to search (default: 3)
+            max_results: Maximum number of routes to return (default: 5)
+
+        Returns:
+            List of routes (each route is a list of dataset names)
+        """
+        routes = []
+
+        # Try route API first
+        try:
+            api_routes = self.route(src, dst, max_hops=max_hops)
+            if api_routes:
+                return api_routes[:max_results]
+        except RuntimeError:
+            # Route API failed (404 or other error), fall back to manual search
+            pass
+
+        # Manual search using config_list_targets
+
+        # Check direct connection (1 hop)
+        try:
+            targets_from_src = self.config_list_targets(src)
+            if dst in targets_from_src:
+                routes.append([src, dst])
+                return routes
+        except RuntimeError:
+            # config_list_targets failed
+            return routes
+
+        # Check 2-hop connections
+        if max_hops >= 2:
+            for intermediate in targets_from_src:
+                try:
+                    targets_from_intermediate = self.config_list_targets(intermediate)
+                    if dst in targets_from_intermediate:
+                        routes.append([src, intermediate, dst])
+                        if len(routes) >= max_results:
+                            return routes
+                except RuntimeError:
+                    continue
+
+            if routes:
+                return routes
+
+        # Check 3-hop connections
+        if max_hops >= 3:
+            for intermediate1 in targets_from_src:
+                try:
+                    targets_from_intermediate1 = self.config_list_targets(intermediate1)
+                    for intermediate2 in targets_from_intermediate1:
+                        if intermediate2 == src:  # Avoid loops
+                            continue
+                        try:
+                            targets_from_intermediate2 = self.config_list_targets(intermediate2)
+                            if dst in targets_from_intermediate2:
+                                routes.append([src, intermediate1, intermediate2, dst])
+                                if len(routes) >= max_results:
+                                    return routes
+                        except RuntimeError:
+                            continue
+                except RuntimeError:
+                    continue
+
+        return routes
 
     def get_ortholog(
         self,
