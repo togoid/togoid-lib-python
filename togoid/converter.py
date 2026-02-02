@@ -263,7 +263,7 @@ class TogoIDConverter:
 
         # Set report parameter based on format and whether annotations/filters are requested
         if 'report' not in params:
-            if annotate or filter:
+            if annotate or filter or len(route) >= 3:
                 params['report'] = 'full'
             elif format in ('dict', 'table', 'dataframe'):
                 params['report'] = 'pair'
@@ -277,6 +277,11 @@ class TogoIDConverter:
 
         # Transform based on format
         if format == 'dict':
+            if len(route) >= 3:
+                raise ValueError(
+                    "format='dict' is not supported when route length >= 3. "
+                    "Use 'table' or 'dataframe' instead."
+                )
             return self._convert_to_dict(response, route)
         elif format == 'table':
             return self._convert_to_table(response)
@@ -430,10 +435,25 @@ class TogoIDConverter:
             num_cols = len(table_data[0]) if table_data else 0
 
             if annotate:
-                # With annotations: use route names + annotation column names
-                col_names = route.copy()
+                # With annotations: build column names matching the data order
+                # Annotations are inserted right after their corresponding dataset column
+                col_names = []
+
+                # Build a mapping of dataset_index -> list of annotation names
+                annotations_map = {}
                 for dataset_name, field_name in annotate:
-                    col_names.append(f"{dataset_name} {field_name}")
+                    dataset_index = route.index(dataset_name)
+                    if dataset_index not in annotations_map:
+                        annotations_map[dataset_index] = []
+                    annotations_map[dataset_index].append(f"{dataset_name} {field_name}")
+
+                # Build column names by inserting annotations after their dataset columns
+                for i, dataset_name in enumerate(route):
+                    col_names.append(dataset_name)
+                    # Add annotation columns for this dataset if any
+                    if i in annotations_map:
+                        col_names.extend(annotations_map[i])
+
                 df = pd.DataFrame(table_data, columns=col_names)
             else:
                 # Without annotations: use route names
