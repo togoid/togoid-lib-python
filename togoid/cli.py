@@ -232,10 +232,15 @@ def handle_label2id(args, api_url: str):
 
     # Convert labels to IDs
     try:
+        # Convert label_types from comma-separated string to list if provided
+        label_types = None
+        if args.label_types:
+            label_types = [t.strip() for t in args.label_types.split(',')]
+
         results = converter.convert(
             labels=labels,
             dataset=args.dataset,
-            label_types=args.label_types,
+            label_types=label_types,
             tags=args.tags,
             threshold=args.threshold,
             preferred_dictionary=args.preferred_dictionary,

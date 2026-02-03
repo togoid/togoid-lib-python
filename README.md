@@ -723,8 +723,6 @@ python3 test_readme_examples.py
 bash test_cli_examples.sh
 ```
 
-See [TESTING.md](TESTING.md) for detailed testing documentation.
-
 ## License
 
 MIT License
