@@ -4,6 +4,8 @@ This document describes how to test the TogoID Python library to ensure all func
 
 ## Test Files
 
+### Core Test Scripts
+
 ### 1. `test_readme_examples.py`
 
 Python script that tests all the Python library examples from README.md.
@@ -84,6 +86,68 @@ Warnings: X
 All critical tests passed!
 ```
 
+### Feature-Specific Test Files
+
+The following test files validate specific features and bug fixes:
+
+### 3. `test_customer_feedback.py`
+
+Tests format output improvements from initial customer feedback.
+
+**What it tests:**
+- Dict format returns proper structure with ids, route, results
+- Table format includes source-target pairs
+- DataFrame format uses dataset names as column headers
+- Annotation columns appear in correct positions
+
+**Run:**
+```bash
+python3 test_customer_feedback.py
+```
+
+### 4. `test_config_list_targets.py`
+
+Tests the `config_list_targets()` method for finding reachable datasets.
+
+**What it tests:**
+- Retrieving list of datasets reachable from a source in one hop
+- Return type is a list of strings
+- Works for various datasets (ncbigene, ensembl_gene, etc.)
+
+**Run:**
+```bash
+python3 test_config_list_targets.py
+```
+
+### 5. `test_feedback_fixes.py`
+
+Tests customer feedback improvements including route handling and parameter changes.
+
+**What it tests:**
+- Routes with 3+ datasets use `report=full` to show all intermediate IDs
+- `format="dict"` raises error for routes with 3+ datasets
+- `label_types` parameter accepts list format
+- `annotator.execute_query()` filters parameter is optional
+
+**Run:**
+```bash
+python3 test_feedback_fixes.py
+```
+
+### 6. `test_route_suggestion.py`
+
+Tests the route suggestion feature for error handling.
+
+**What it tests:**
+- Error messages suggest alternative routes when datasets aren't connected
+- Suggestions include 2-hop and 3-hop routes
+- Error handling for invalid dataset pairs
+
+**Run:**
+```bash
+python3 test_route_suggestion.py
+```
+
 ## Running Specific Tests
 
 ### Test only Python library functionality
@@ -98,10 +162,30 @@ python3 test_readme_examples.py
 bash test_cli_examples.sh
 ```
 
-### Test both
+### Test both core scripts
 
 ```bash
 python3 test_readme_examples.py && bash test_cli_examples.sh
+```
+
+### Test all feature-specific tests
+
+```bash
+python3 test_customer_feedback.py && \
+python3 test_config_list_targets.py && \
+python3 test_feedback_fixes.py && \
+python3 test_route_suggestion.py
+```
+
+### Test everything
+
+```bash
+python3 test_readme_examples.py && \
+bash test_cli_examples.sh && \
+python3 test_customer_feedback.py && \
+python3 test_config_list_targets.py && \
+python3 test_feedback_fixes.py && \
+python3 test_route_suggestion.py
 ```
 
 ## Understanding Test Results
