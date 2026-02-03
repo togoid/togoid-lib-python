@@ -118,7 +118,7 @@ results = label_converter.convert(
 results = label_converter.convert(
     labels=["caffeine"],
     dataset="chebi",
-    label_types="togoid_chebi_label"
+    label_types=["togoid_chebi_label"]
 )
 
 # Get Annotations
@@ -174,6 +174,70 @@ togoid annotate --dataset ncbigene --list-fields
 togoid config dataset ncbigene
 togoid config descriptions
 togoid count ncbigene ensembl_gene --ids 1,9
+```
+
+## Breaking Changes
+
+### Version 0.2.0+
+
+**1. label_types parameter now requires list format**
+
+The `label_types` parameter in `LabelConverter.convert()` has been changed from string to list type.
+
+```python
+# ❌ Old (will not work)
+label_converter.convert(
+    labels=["BRCA1"],
+    dataset="ncbigene",
+    label_types="symbol,synonym"  # String format
+)
+
+# ✅ New (correct)
+label_converter.convert(
+    labels=["BRCA1"],
+    dataset="ncbigene",
+    label_types=["symbol", "synonym"]  # List format
+)
+```
+
+**2. format="dict" deprecated for routes with 3+ datasets**
+
+When using routes with 3 or more datasets, `format="dict"` is no longer supported. Use `format="table"` or `format="dataframe"` instead.
+
+```python
+# ❌ Old (will raise error)
+converter.convert(
+    ids=["1"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="dict"
+)
+
+# ✅ New (correct)
+converter.convert(
+    ids=["1"],
+    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
+    format="table"  # or "dataframe"
+)
+```
+
+**3. annotator.execute_query filters parameter is now optional**
+
+The `filters` parameter in `AnnotationsConverter.execute_query()` is now optional and defaults to an empty dictionary.
+
+```python
+# Both work now
+annotations = annotator.execute_query(
+    dataset_name="ncbigene",
+    ids=["672"],
+    fields=["label"],
+    filters={}  # Can be omitted
+)
+
+annotations = annotator.execute_query(
+    dataset_name="ncbigene",
+    ids=["672"],
+    fields=["label"]  # No filters parameter needed
+)
 ```
 
 ## Usage Examples
@@ -300,7 +364,7 @@ results = converter.convert(
 results = converter.convert(
     labels=["caffeine"],
     dataset="chebi",
-    label_types="togoid_chebi_label"  # Optional: override dataset config
+    label_types=["togoid_chebi_label"]  # Optional: override dataset config (list format)
 )
 
 # Convert disease names
@@ -310,11 +374,11 @@ results = converter.convert(
     threshold=0.5  # PubDictionaries matching threshold
 )
 
-# Label types are auto-configured from dataset, or can be manually specified
+# Label types are auto-configured from dataset, or can be manually specified (as list)
 results = converter.convert(
     labels=["BRCA1"],
     dataset="ncbigene",
-    label_types="symbol",  # Override: only search by symbol
+    label_types=["symbol"],  # Override: only search by symbol (list format)
     taxonomy="9606"
 )
 ```
@@ -452,9 +516,9 @@ Main class for ID conversion operations.
 Main class for converting biological labels to database IDs with automatic API detection.
 
 **Methods:**
-- `convert(labels, dictionaries=None, tags=None, threshold=0.5, preferred_dictionary=None, label_types='symbol,synonym', taxon=None)` - Convert labels to IDs (auto-detects API)
+- `convert(labels, dataset, label_types=None, tags=None, threshold=0.5, preferred_dictionary=None, taxonomy=None, format='json')` - Convert labels to IDs (auto-selects API based on dataset config)
 - `convert_pubdictionaries(labels, dictionaries, tags=None, threshold=0.5, preferred_dictionary=None)` - Convert using PubDictionaries API
-- `convert_sparqlist(labels, sparqlist, label_types, taxon=None)` - Convert using SPARQList API
+- `convert_sparqlist(labels, sparqlist, label_types, taxonomy=None)` - Convert using SPARQList API
 
 **Auto-detection Logic:**
 - If labels are gene symbols (non-numeric) → Uses SPARQList API for ncbigene
@@ -587,6 +651,41 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair
 
 # Full path including intermediate IDs
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript --report full
+```
+
+**Note:** When using routes with 3+ datasets or annotations, the library automatically uses `report=full` to include all intermediate IDs.
+
+### Finding Reachable Datasets
+
+Get a list of datasets that are reachable from a source dataset in one hop:
+
+```bash
+# CLI
+togoid config list-targets ncbigene
+
+# Python
+converter = TogoIDConverter()
+targets = converter.config_list_targets("ncbigene")
+print(targets)  # ['ensembl_gene', 'hgnc', 'mgi', ...]
+```
+
+### Route Suggestions
+
+When datasets are not directly connected, the library automatically suggests alternative routes:
+
+```python
+# If ncbigene → chembl_compound isn't directly connected
+converter.convert(ids=["1"], route=["ncbigene", "chembl_compound"])
+
+# Error message will suggest alternatives:
+# RuntimeError: No direct connection between 'ncbigene' and 'chembl_compound'.
+#
+# Suggested routes (2 hops):
+# - ncbigene → ensembl_gene → chembl_compound
+# - ncbigene → uniprot → chembl_compound
+#
+# Suggested routes (3 hops):
+# - ncbigene → ensembl_gene → pdb → chembl_compound
 ```
 
 ## Configuration
