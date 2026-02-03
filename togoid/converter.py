@@ -487,8 +487,9 @@ class TogoIDConverter:
                 if num_cols == len(route):
                     df = pd.DataFrame(table_data, columns=route)
                 elif num_cols < len(route):
-                    # Fewer columns than route (e.g., only target IDs)
-                    df = pd.DataFrame(table_data, columns=route[:num_cols])
+                    # Fewer columns than route (e.g., only target IDs with report='target')
+                    # Use the last N dataset names from the route
+                    df = pd.DataFrame(table_data, columns=route[-num_cols:])
                 else:
                     # More columns than route (shouldn't happen, but handle it)
                     col_names = route + [f'col_{i}' for i in range(len(route), num_cols)]

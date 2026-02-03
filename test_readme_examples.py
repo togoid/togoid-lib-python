@@ -91,7 +91,7 @@ def test_quick_start_label_conversion():
     results2 = label_converter.convert(
         labels=["caffeine"],
         dataset="chebi",
-        label_types="togoid_chebi_label"
+        label_types=["togoid_chebi_label"]
     )
     print(f"✓ Chemical names conversion: {len(results2)} results")
 
@@ -216,7 +216,7 @@ def test_report_options():
             format="dataframe",
             report="target"
         )
-        assert 'target_id' in df_target.columns, "Missing 'target_id' column"
+        assert 'ensembl_gene' in df_target.columns, "Missing 'ensembl_gene' column"
         print(f"✓ DataFrame with report='target': columns={list(df_target.columns)}")
 
         # DataFrame with report='pair'
@@ -226,8 +226,8 @@ def test_report_options():
             format="dataframe",
             report="pair"
         )
-        assert 'source_id' in df_pair.columns and 'target_id' in df_pair.columns, \
-            "Missing source_id or target_id columns"
+        assert 'ncbigene' in df_pair.columns and 'ensembl_gene' in df_pair.columns, \
+            "Missing ncbigene or ensembl_gene columns"
         print(f"✓ DataFrame with report='pair': columns={list(df_pair.columns)}")
 
         # DataFrame with report='full'
@@ -268,7 +268,7 @@ def test_label_conversion_detailed():
     results2 = converter.convert(
         labels=["caffeine"],
         dataset="chebi",
-        label_types="togoid_chebi_label"  # Optional: override dataset config
+        label_types=["togoid_chebi_label"]  # Optional: override dataset config
     )
     print(f"✓ Chemical names (PubDictionaries): {len(results2)} results")
 
@@ -284,7 +284,7 @@ def test_label_conversion_detailed():
     results4 = converter.convert(
         labels=["BRCA1"],
         dataset="ncbigene",
-        label_types="symbol",  # Override: only search by symbol
+        label_types=["symbol"],  # Override: only search by symbol
         taxonomy="9606"
     )
     assert len(results4) >= 1, f"Expected at least 1 result, got {len(results4)}"
