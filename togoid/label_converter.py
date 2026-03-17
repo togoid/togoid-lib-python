@@ -123,6 +123,7 @@ class LabelConverter:
             "labels": "|".join(labels),
             "dictionaries": dictionaries,
             "verbose": "true",
+            "use_ngram_similarity": "true",
         }
         if tags:
             params["tags"] = tags
@@ -310,11 +311,24 @@ class LabelConverter:
         Returns:
             List of result dictionaries (json format) or pandas DataFrame (dataframe format)
         """
+        # Get dataset configuration
+        datasets = self._get_dataset_config()
+        if dataset not in datasets:
+            raise ValueError(f"Unknown dataset: {dataset}")
+
+        dataset_config = datasets[dataset]
+        label_resolver = dataset_config.get("label_resolver", {})
+
+        # Check if taxonomy is required
+        taxonomy_required = label_resolver.get("taxonomy", False)
+        if taxonomy_required and taxonomy is None:
+            raise ValueError(
+                f"Taxonomy is required for dataset: {dataset}. "
+                f"Please specify the 'taxonomy' parameter (e.g., taxonomy='9606' for human)"
+            )
+
         if self._should_use_sparqlist_for_dataset(dataset):
             # Get SPARQList endpoint from dataset config
-            datasets = self._get_dataset_config()
-            dataset_config = datasets[dataset]
-            label_resolver = dataset_config["label_resolver"]
             sparqlist_endpoint = label_resolver["sparqlist"]
 
             # Use label_types from argument or extract from dataset config
