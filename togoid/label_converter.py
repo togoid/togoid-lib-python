@@ -349,24 +349,36 @@ class LabelConverter:
             datasets = self._get_dataset_config()
             dataset_config = datasets.get(dataset, {})
             label_resolver = dataset_config.get("label_resolver", {})
+            dictionary_configs = label_resolver.get("dictionaries", [])
 
-            # Use label_types from argument or extract dictionaries from dataset config
             if label_types is None:
                 # Extract dictionary names from dataset config
-                dictionary_configs = label_resolver.get("dictionaries", [])
                 if dictionary_configs:
-                    label_types = [d["dictionary"] for d in dictionary_configs]
+                    resolved_dictionaries = [d["dictionary"] for d in dictionary_configs]
                 else:
                     raise ValueError(
                         f"The label_types argument is required for dataset '{dataset}' "
                         "which does not have dictionary configuration"
                     )
-                self._log(f"Using dictionaries from dataset config: {label_types}")
+                self._log(f"Using dictionaries from dataset config: {resolved_dictionaries}")
+            else:
+                # Map label_type short names to dictionary names
+                label_type_to_dict = {
+                    d.get("label_type", ""): d["dictionary"]
+                    for d in dictionary_configs
+                    if "dictionary" in d
+                }
+                resolved_dictionaries = [
+                    label_type_to_dict.get(lt, lt) for lt in label_types
+                ]
+                self._log(
+                    f"Resolved label_types {label_types} to dictionaries: {resolved_dictionaries}"
+                )
 
             self._log(f"Using PubDictionaries API for dataset '{dataset}'")
             results = self.convert_pubdictionaries(
                 labels=labels,
-                dictionaries=",".join(label_types),
+                dictionaries=",".join(resolved_dictionaries),
                 tags=tags,
                 threshold=threshold,
                 preferred_dictionary=preferred_dictionary,

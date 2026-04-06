@@ -653,9 +653,12 @@ class TogoIDConverter:
             if len(parts) == 2:
                 src, dst = parts
 
-                # If source matches, add target to list
+                # If source matches (forward link), add target to list
                 if src == source:
                     targets.append(dst)
+                # If destination matches (reverse link), add source to list
+                if dst == source:
+                    targets.append(src)
 
         # Remove duplicates and sort
         return sorted(set(targets))

@@ -146,7 +146,8 @@ class AnnotationsConverter:
         ids: List[str],
         fields: Iterable[str],
         filters: Optional[Dict[str, List[str]]] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        format: str = "dict",
+    ) -> Any:
         if filters is None:
             filters = {}
 
@@ -187,6 +188,19 @@ class AnnotationsConverter:
             result[identifier] = {
                 key: value for key, value in entry.items() if key != "id"
             }
+
+        if format == "dataframe":
+            try:
+                import pandas as pd
+            except ImportError:
+                raise ImportError(
+                    "pandas is required for dataframe format. "
+                    "Install with: pip install pandas"
+                )
+            if not result:
+                return pd.DataFrame()
+            rows = [{"id": id_val, **fields_data} for id_val, fields_data in result.items()]
+            return pd.DataFrame(rows)
 
         return result
 
