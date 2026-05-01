@@ -472,7 +472,7 @@ class TogoIDConverter:
                     dataset_index = route.index(dataset_name)
                     if dataset_index not in annotations_map:
                         annotations_map[dataset_index] = []
-                    annotations_map[dataset_index].append(f"{dataset_name} {field_name}")
+                    annotations_map[dataset_index].append(f"{dataset_name}.{field_name}")
 
                 # Build column names by inserting annotations after their dataset columns
                 for i, dataset_name in enumerate(route):

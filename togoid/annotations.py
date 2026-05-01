@@ -197,9 +197,29 @@ class AnnotationsConverter:
                     "pandas is required for dataframe format. "
                     "Install with: pip install pandas"
                 )
-            if not result:
+
+            data_fields = [f for f in fields if f != "id"]
+
+            # Detect list-typed fields so we can normalize "missing" cells to []
+            list_fields = {
+                f for f in data_fields
+                if any(isinstance(rec.get(f), list) for rec in result.values())
+            }
+
+            rows = []
+            for id_val in deduped_ids:
+                record = result.get(id_val, {})
+                row: Dict[str, Any] = {"id": id_val}
+                for field in data_fields:
+                    value = record.get(field)
+                    if value is None:
+                        row[field] = [] if field in list_fields else None
+                    else:
+                        row[field] = value
+                rows.append(row)
+
+            if not rows:
                 return pd.DataFrame()
-            rows = [{"id": id_val, **fields_data} for id_val, fields_data in result.items()]
             return pd.DataFrame(rows)
 
         return result

@@ -101,24 +101,33 @@ class LabelConverter:
         tags: Optional[str] = None,
         threshold: float = 0.5,
         preferred_dictionary: Optional[str] = None,
+        dictionary_to_label: Optional[Dict[str, str]] = None,
+        preferred_label_column: str = "name",
     ) -> List[Dict[str, Any]]:
         """
         Convert labels to IDs using PubDictionaries API
+
+        The output mirrors the TogoID Web UI: each row contains
+        ``input``, ``match_type`` (the human-readable dictionary label such as
+        "Name" / "Exact synonym"), the canonical label under the column whose
+        name comes from the preferred dictionary's ``label`` (e.g. "Name"),
+        ``score`` and ``identifier``.
 
         Args:
             labels: List of labels to search
             dictionaries: Comma-separated dictionary names
             tags: Taxonomy tags (e.g., "9606" for human)
             threshold: Matching score threshold (0-1)
-            preferred_dictionary: Preferred dictionary for synonym resolution
-
-        Returns:
-            List of result dictionaries
+            preferred_dictionary: Preferred dictionary for canonical label resolution
+            dictionary_to_label: Mapping of dictionary id -> human-readable label
+            preferred_label_column: Column name for the canonical label
         """
         self._log(f"Converting {len(labels)} labels using PubDictionaries API")
         self._log(f"Dictionaries: {dictionaries}")
 
-        # Step 1: Find IDs
+        if dictionary_to_label is None:
+            dictionary_to_label = {}
+
         params = {
             "labels": "|".join(labels),
             "dictionaries": dictionaries,
@@ -137,80 +146,82 @@ class LabelConverter:
         response.raise_for_status()
         find_ids_data = response.json()
 
-        results = []
+        # Collect identifiers from non-preferred dictionaries to resolve canonical labels
+        synonym_identifiers: List[str] = []
+        if preferred_dictionary:
+            for label in labels:
+                for item in find_ids_data.get(label, []) or []:
+                    dict_id = item.get("dictionary", "")
+                    identifier = item.get("identifier", "")
+                    if dict_id and dict_id != preferred_dictionary and identifier:
+                        synonym_identifiers.append(identifier)
+            # Dedupe while preserving order
+            synonym_identifiers = list(dict.fromkeys(synonym_identifiers))
 
-        # Step 2: Process each label
+        canonical_lookup: Dict[str, str] = {}
+        if synonym_identifiers and preferred_dictionary:
+            self._log(
+                f"Resolving {len(synonym_identifiers)} synonyms via {preferred_dictionary}"
+            )
+            try:
+                terms_response = self.session.get(
+                    f"{self.PUBDICT_BASE_URL}/find_terms.json",
+                    params={
+                        "identifiers": "|".join(synonym_identifiers),
+                        "dictionaries": preferred_dictionary,
+                    },
+                )
+                terms_response.raise_for_status()
+                terms_data = terms_response.json() or {}
+                for id_key, entry in terms_data.items():
+                    if isinstance(entry, dict) and "label" in entry:
+                        canonical_lookup[str(id_key)] = entry.get("label", "")
+                    elif isinstance(entry, list) and entry:
+                        first = entry[0]
+                        if isinstance(first, dict):
+                            canonical_lookup[str(id_key)] = first.get("label", "")
+            except Exception as exc:  # noqa: BLE001
+                self._log(f"find_terms lookup failed: {exc}")
+
+        results: List[Dict[str, Any]] = []
+
         for label in labels:
             table_base_data = find_ids_data.get(label, [])
 
             if not table_base_data:
                 self._log(f"No results found for label: {label}")
-                results.append(
-                    {
-                        "input": label,
-                        "match_type": "Unmatched",
-                        "name": "",
-                        "score": None,
-                        "identifier": "",
-                    }
-                )
+                row = {
+                    "input": label,
+                    "match_type": "Unmatched",
+                    preferred_label_column: None,
+                    "score": None,
+                    "identifier": "",
+                }
+                results.append(row)
                 continue
 
-            # Step 3: Resolve synonyms if preferred dictionary is specified
-            if preferred_dictionary:
-                synonym_ids = [
-                    item["identifier"]
-                    for item in table_base_data
-                    if item.get("dictionary") != preferred_dictionary
-                ]
-
-                if synonym_ids:
-                    self._log(
-                        f"Resolving {len(synonym_ids)} synonyms for label: {label}"
-                    )
-                    synonym_params = {
-                        "ids": "|".join(synonym_ids),
-                        "dictionaries": preferred_dictionary,
-                    }
-                    synonym_response = self.session.get(
-                        f"{self.PUBDICT_BASE_URL}/find_terms.json",
-                        params=synonym_params,
-                    )
-                    synonym_response.raise_for_status()
-                    synonym_data = synonym_response.json()
-                else:
-                    synonym_data = {}
-            else:
-                synonym_data = {}
-
-            # Step 4: Format results
             for item in table_base_data:
-                dictionary = item.get("dictionary", "")
+                dict_id = item.get("dictionary", "")
                 identifier = item.get("identifier", "")
                 score = item.get("score")
 
-                # Resolve name
-                if preferred_dictionary and dictionary != preferred_dictionary:
-                    synonym_info = synonym_data.get(identifier)
-                    if synonym_info:
-                        if isinstance(synonym_info, list):
-                            name = synonym_info[0].get("label", "")
-                        else:
-                            name = synonym_info.get("label", "")
-                    else:
-                        name = item.get("label", "")
-                else:
-                    name = item.get("label", "")
+                match_label = dictionary_to_label.get(dict_id) or dict_id or "PubDictionaries"
 
-                results.append(
-                    {
-                        "input": label,
-                        "match_type": dictionary,
-                        "name": name,
-                        "score": score,
-                        "identifier": identifier,
-                    }
-                )
+                if preferred_dictionary and dict_id == preferred_dictionary:
+                    canonical_label = item.get("label", "")
+                elif preferred_dictionary:
+                    canonical_label = canonical_lookup.get(identifier, item.get("label", ""))
+                else:
+                    canonical_label = item.get("label", "")
+
+                row = {
+                    "input": label,
+                    "match_type": match_label,
+                    preferred_label_column: canonical_label,
+                    "score": score,
+                    "identifier": identifier,
+                }
+                results.append(row)
 
         self._log(f"Total results: {len(results)}")
         return results
@@ -351,6 +362,22 @@ class LabelConverter:
             label_resolver = dataset_config.get("label_resolver", {})
             dictionary_configs = label_resolver.get("dictionaries", [])
 
+            # Build dictionary -> label map and locate preferred dictionary
+            dictionary_to_label: Dict[str, str] = {}
+            config_preferred_dictionary: Optional[str] = None
+            preferred_label_column = "name"
+            for d in dictionary_configs:
+                dname = d.get("dictionary")
+                if not dname:
+                    continue
+                dictionary_to_label[dname] = d.get("label", dname)
+                if d.get("preferred"):
+                    config_preferred_dictionary = dname
+                    preferred_label_column = d.get("label", dname)
+
+            # Caller-supplied preferred_dictionary overrides config
+            effective_preferred = preferred_dictionary or config_preferred_dictionary
+
             if label_types is None:
                 # Extract dictionary names from dataset config
                 if dictionary_configs:
@@ -381,7 +408,9 @@ class LabelConverter:
                 dictionaries=",".join(resolved_dictionaries),
                 tags=tags,
                 threshold=threshold,
-                preferred_dictionary=preferred_dictionary,
+                preferred_dictionary=effective_preferred,
+                dictionary_to_label=dictionary_to_label,
+                preferred_label_column=preferred_label_column,
             )
 
         # Convert to dataframe if requested
