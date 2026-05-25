@@ -140,8 +140,9 @@ class LabelConverter:
             params["threshold"] = str(threshold)
 
         self._log(f"Request URL: {self.PUBDICT_BASE_URL}/find_ids.json")
-        response = self.session.get(
-            f"{self.PUBDICT_BASE_URL}/find_ids.json", params=params
+        # POST + form encoding avoids URL-length limits for large label sets.
+        response = self.session.post(
+            f"{self.PUBDICT_BASE_URL}/find_ids.json", data=params
         )
         response.raise_for_status()
         find_ids_data = response.json()
@@ -164,9 +165,9 @@ class LabelConverter:
                 f"Resolving {len(synonym_identifiers)} synonyms via {preferred_dictionary}"
             )
             try:
-                terms_response = self.session.get(
+                terms_response = self.session.post(
                     f"{self.PUBDICT_BASE_URL}/find_terms.json",
-                    params={
+                    data={
                         "identifiers": "|".join(synonym_identifiers),
                         "dictionaries": preferred_dictionary,
                     },
@@ -195,24 +196,24 @@ class LabelConverter:
                     "match_type": "Unmatched",
                     preferred_label_column: None,
                     "score": None,
-                    "identifier": "",
+                    "identifier": None,
                 }
                 results.append(row)
                 continue
 
             for item in table_base_data:
-                dict_id = item.get("dictionary", "")
-                identifier = item.get("identifier", "")
+                dict_id = item.get("dictionary") or None
+                identifier = item.get("identifier") or None
                 score = item.get("score")
 
                 match_label = dictionary_to_label.get(dict_id) or dict_id or "PubDictionaries"
 
                 if preferred_dictionary and dict_id == preferred_dictionary:
-                    canonical_label = item.get("label", "")
+                    canonical_label = item.get("label") or None
                 elif preferred_dictionary:
-                    canonical_label = canonical_lookup.get(identifier, item.get("label", ""))
+                    canonical_label = canonical_lookup.get(identifier) or item.get("label") or None
                 else:
-                    canonical_label = item.get("label", "")
+                    canonical_label = item.get("label") or None
 
                 row = {
                     "input": label,
@@ -259,7 +260,8 @@ class LabelConverter:
         url = f"{self.SPARQLIST_BASE_URL}/{sparqlist}"
         self._log(f"Request URL: {url}")
 
-        response = self.session.get(url, params=params)
+        # SPARQList only accepts form-encoded POST (JSON POST returns 500).
+        response = self.session.post(url, data=params)
         response.raise_for_status()
         data = response.json()
 
@@ -274,8 +276,8 @@ class LabelConverter:
                     {
                         "input": label,
                         "match_type": "Unmatched",
-                        "symbol": "",
-                        "identifier": "",
+                        "symbol": None,
+                        "identifier": None,
                     }
                 )
                 continue
@@ -422,7 +424,10 @@ class LabelConverter:
                 )
             if not results:
                 return pd.DataFrame()
-            return pd.DataFrame(results)
+            df = pd.DataFrame(results, dtype=object)
+            # Promote None / NaN to pd.NA for a consistent missing-value sentinel.
+            df = df.where(df.notna(), pd.NA)
+            return df
         else:
             return results
 

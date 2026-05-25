@@ -32,15 +32,17 @@ class TogoIDConverter:
         self.api_base_url = (api_base_url or self.DEFAULT_API_URL).rstrip('/')
 
     def _make_request(self, endpoint: str, method: str = 'GET', params: Optional[Dict] = None,
-                      json_data: Optional[Dict] = None) -> Any:
+                      json_data: Optional[Dict] = None,
+                      form_data: Optional[Dict] = None) -> Any:
         """
         Make HTTP request to API
 
         Args:
             endpoint: API endpoint path
             method: HTTP method (GET or POST)
-            params: Query parameters
-            json_data: JSON data for POST requests
+            params: Query parameters (GET only; ignored for POST when form_data/json_data given)
+            json_data: JSON body for POST requests
+            form_data: application/x-www-form-urlencoded body for POST requests
 
         Returns:
             Response data (parsed JSON or text)
@@ -51,7 +53,12 @@ class TogoIDConverter:
             if method == 'GET':
                 resp = requests.get(url, params=params, timeout=30)
             elif method == 'POST':
-                resp = requests.post(url, json=json_data, params=params, timeout=30)
+                if form_data is not None:
+                    resp = requests.post(url, data=form_data, timeout=30)
+                elif json_data is not None:
+                    resp = requests.post(url, json=json_data, timeout=30)
+                else:
+                    resp = requests.post(url, data=params, timeout=30)
             else:
                 raise ValueError(f"Unsupported method: {method}")
 
@@ -272,9 +279,10 @@ class TogoIDConverter:
             elif format in ('dict', 'table', 'dataframe'):
                 params['report'] = 'pair'
 
-        # Get API response with route suggestion on error
+        # Get API response with route suggestion on error.
+        # POST + form encoding lets us send large ID lists without hitting URL-length limits.
         try:
-            response = self._make_request('/convert', 'GET', params=params)
+            response = self._make_request('/convert', 'POST', form_data=params)
         except RuntimeError as e:
             # Check if it's a connection error (400 Bad Request or similar)
             error_str = str(e)
@@ -384,6 +392,11 @@ class TogoIDConverter:
         Returns:
             2D array with [source_id, target_id, ...] rows
         """
+        # Preserve None as Python None (missing mapping) instead of stringifying
+        # it to "None". DataFrame conversion then promotes None -> pd.NA.
+        def _cell(v):
+            return None if v is None else str(v)
+
         result = []
 
         # Handle TogoID API response format with 'results' key
@@ -392,11 +405,9 @@ class TogoIDConverter:
             if isinstance(results_data, list):
                 for item in results_data:
                     if isinstance(item, list):
-                        # Already a list, convert all elements to strings
-                        result.append([str(elem) for elem in item])
+                        result.append([_cell(elem) for elem in item])
                     else:
-                        # Single value
-                        result.append([str(item)])
+                        result.append([_cell(item)])
             return result
 
         # Handle simple list format
@@ -404,24 +415,23 @@ class TogoIDConverter:
             # Handle list format (e.g., [[source, target], ...] or [[source, target, annotation], ...])
             for item in response:
                 if isinstance(item, list):
-                    # Convert all elements to strings
-                    result.append([str(elem) for elem in item])
+                    result.append([_cell(elem) for elem in item])
                 elif isinstance(item, dict):
                     # Handle dict items within list
                     for key, value in item.items():
                         if isinstance(value, list):
                             for v in value:
-                                result.append([str(key), str(v)])
+                                result.append([_cell(key), _cell(v)])
                         else:
-                            result.append([str(key), str(value)])
+                            result.append([_cell(key), _cell(value)])
         elif isinstance(response, dict):
             # Handle dictionary format (not TogoID API format)
             for source_id, targets in response.items():
                 if isinstance(targets, list):
                     for target_id in targets:
-                        result.append([str(source_id), str(target_id)])
+                        result.append([_cell(source_id), _cell(target_id)])
                 else:
-                    result.append([str(source_id), str(targets)])
+                    result.append([_cell(source_id), _cell(targets)])
 
         return result
 
@@ -481,19 +491,24 @@ class TogoIDConverter:
                     if i in annotations_map:
                         col_names.extend(annotations_map[i])
 
-                df = pd.DataFrame(table_data, columns=col_names)
+                df = pd.DataFrame(table_data, columns=col_names, dtype=object)
             else:
                 # Without annotations: use route names
                 if num_cols == len(route):
-                    df = pd.DataFrame(table_data, columns=route)
+                    df = pd.DataFrame(table_data, columns=route, dtype=object)
                 elif num_cols < len(route):
                     # Fewer columns than route (e.g., only target IDs with report='target')
                     # Use the last N dataset names from the route
-                    df = pd.DataFrame(table_data, columns=route[-num_cols:])
+                    df = pd.DataFrame(table_data, columns=route[-num_cols:], dtype=object)
                 else:
                     # More columns than route (shouldn't happen, but handle it)
                     col_names = route + [f'col_{i}' for i in range(len(route), num_cols)]
-                    df = pd.DataFrame(table_data, columns=col_names)
+                    df = pd.DataFrame(table_data, columns=col_names, dtype=object)
+
+        # Promote any missing cell (None / NaN) to pd.NA for a consistent
+        # missing-value sentinel in DataFrame output.
+        if not df.empty:
+            df = df.where(df.notna(), pd.NA)
         return df
 
     def count(self, src: str, dst: str, ids: List[str], link: Optional[str] = None) -> Dict:
@@ -512,7 +527,7 @@ class TogoIDConverter:
         params = {'ids': ','.join(ids)}
         if link:
             params['link'] = link
-        return self._make_request(f'/count/{src}-{dst}', 'GET', params=params)
+        return self._make_request(f'/count/{src}-{dst}', 'POST', form_data=params)
 
     def search_databases(self, name: str) -> List[str]:
         """
