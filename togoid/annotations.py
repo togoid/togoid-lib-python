@@ -16,6 +16,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
 
+from ._ids import local_id
+
 
 # Default endpoints
 DEFAULT_API_ENDPOINT = os.environ.get(
@@ -155,8 +157,19 @@ class AnnotationsConverter:
         if not deduped_ids:
             raise ValueError("At least one identifier is required.")
 
+        # GRASP is keyed by raw DB IDs. Accept prefixed CURIEs (togoid-api PR #149)
+        # by querying with the raw local id, while mapping results back to the
+        # caller's original id form. No-op on already-raw ids.
+        query_ids: List[str] = []
+        local_to_original: Dict[str, str] = {}
+        for original in deduped_ids:
+            local = local_id(original)
+            if local not in local_to_original:
+                local_to_original[local] = original
+                query_ids.append(local)
+
         query, variables = self.build_query(dataset_name, fields, filters)
-        variables["id"] = deduped_ids
+        variables["id"] = query_ids
         for key, value in filters.items():
             variables[key] = list(dict.fromkeys(value))
 
@@ -184,6 +197,8 @@ class AnnotationsConverter:
             identifier = entry.get("id")
             if identifier is None:
                 continue
+            # GRASP returns raw IDs; map back to the caller's original id form.
+            identifier = local_to_original.get(identifier, identifier)
             # ID フィールドは呼び出し側で扱うため、ここでは格納しない。
             result[identifier] = {
                 key: value for key, value in entry.items() if key != "id"

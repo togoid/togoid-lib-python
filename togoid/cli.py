@@ -60,6 +60,9 @@ Examples:
     convert_parser.add_argument('--filter', action='append', nargs=3, metavar=('DATASET', 'FIELD', 'VALUES'),
                                 help='Filter by annotation value (dataset field values). Values should be comma-separated.')
     convert_parser.add_argument('--output', help='Output file path')
+    convert_parser.add_argument('--raw', action='store_true',
+                                help='Return raw IDs without dataset prefixes (sends prefix=no). '
+                                     'By default the API formats IDs as CURIEs, e.g. GO:0005634.')
 
     # ========== LABEL2ID subcommand ==========
     label2id_parser = subparsers.add_parser('label2id', help='Convert labels to IDs')
@@ -196,6 +199,10 @@ def handle_convert(args, converter: TogoIDConverter):
     # Set report parameter (automatically set to 'full' if annotate/filter used)
     if not (args.annotate or args.filter):
         kwargs['report'] = args.report
+
+    # --raw opts out of the API's CURIE prefixing (PR #149)
+    if getattr(args, 'raw', False):
+        kwargs['prefix'] = False
 
     result = converter.convert(route, ids, **kwargs)
 

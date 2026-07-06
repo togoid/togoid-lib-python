@@ -176,6 +176,38 @@ togoid config descriptions
 togoid count ncbigene ensembl_gene --ids 1,9
 ```
 
+## ID Prefixes (CURIE format)
+
+The TogoID API can format converted IDs with their dataset prefix (CURIE), e.g.
+`0005634` → `GO:0005634`, `217124` → `ORPHA:217124`. This is the **default** output
+of `convert()`:
+
+```python
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full")
+# -> [['ORPHA:217124', 'P23284', 'GO:0005737'], ...]
+```
+
+Pass `prefix=False` (CLI: `--raw`) to get raw IDs without prefixes:
+
+```python
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full", prefix=False)
+# -> [['217124', 'P23284', '0005737'], ...]
+```
+
+```bash
+togoid convert --route orphanet_gene,uniprot,go --ids 217124 --report full --raw
+```
+
+Notes:
+
+- Prefixing requires the server-side `?prefix` support ([togoid-api PR #149](https://github.com/togoid/togoid-api/pull/149)).
+  Against API deployments that predate it, output is raw regardless of `prefix`.
+- `annotate` / `filter` and `get_ortholog` transparently handle prefixed IDs: the
+  library matches on the raw local ID internally, so joins keep working while the
+  displayed IDs stay prefixed.
+- `label2id` (`LabelConverter`) returns raw identifiers — it resolves labels via
+  PubDictionaries / SPARQList, which are not covered by the API's `?prefix`.
+
 ## Breaking Changes
 
 ### Version 0.2.0+
