@@ -98,7 +98,7 @@ result = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"])
 
 # Label conversion
 label_converter = LabelConverter()
-results = label_converter.convert(labels=["BRCA1", "TP53"], taxon="9606")
+results = label_converter.convert(labels=["BRCA1", "TP53"], dataset="ncbigene", taxonomy="9606")
 
 # Annotations
 annotator = AnnotationsConverter()
@@ -117,7 +117,7 @@ annotations = annotator.execute_query(
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
 # Label to ID conversion
-togoid label2id --labels "BRCA1,TP53" --taxon 9606
+togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
 
 # Get annotations
 togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym

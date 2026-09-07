@@ -461,21 +461,21 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
 
 ```bash
 # Basic conversion
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxon 9606
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxonomy 9606
 togoid label2id --dataset chebi --labels 'caffeine' --label_types 'togoid_chebi_label'
 
 # From file
 echo -e "BRCA1\nTP53\nEGFR" > genes.txt
-togoid label2id --dataset ncbigene --label-file genes.txt --taxon 9606
+togoid label2id --dataset ncbigene --label-file genes.txt --taxonomy 9606
 
 # CSV output
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --format csv --output results.csv
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --format csv --output results.csv
 
 # With PubDictionaries (for non-gene labels)
 togoid label2id --dataset chebi --labels "breast cancer" --label_types "togoid_mondo_label"
 
 # Verbose mode
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --verbose
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --verbose
 ```
 
 ### Annotate Command
@@ -545,17 +545,19 @@ Main class for ID conversion operations.
 
 ### LabelConverter
 
-Main class for converting biological labels to database IDs with automatic API detection.
+Main class for converting biological labels to database IDs. The upstream API is selected from the dataset configuration.
 
 **Methods:**
 - `convert(labels, dataset, label_types=None, tags=None, threshold=0.5, preferred_dictionary=None, taxonomy=None, format='json')` - Convert labels to IDs (auto-selects API based on dataset config)
 - `convert_pubdictionaries(labels, dictionaries, tags=None, threshold=0.5, preferred_dictionary=None)` - Convert using PubDictionaries API
 - `convert_sparqlist(labels, sparqlist, label_types, taxonomy=None)` - Convert using SPARQList API
 
-**Auto-detection Logic:**
-- If labels are gene symbols (non-numeric) → Uses SPARQList API for ncbigene
-- If labels are numeric IDs or other formats → Uses PubDictionaries API
-- ncbigene regex pattern is fetched from TogoID API dynamically
+**API selection:**
+- The dataset's `label_resolver` configuration is fetched from the TogoID API
+  (`/config/dataset`) and decides which upstream to use — it is not inferred from
+  the labels themselves.
+- `label_resolver.sparqlist` present → SPARQList (e.g. `ncbigene`)
+- otherwise → PubDictionaries (e.g. `chebi`, `mondo`)
 
 ### AnnotationsConverter
 
