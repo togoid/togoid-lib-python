@@ -10,6 +10,8 @@ from typing import Optional, List, Dict, Any, Tuple
 
 import requests
 
+from ._ids import local_id as _local_id_helper
+
 try:
     import pandas as pd
     PANDAS_AVAILABLE = True
@@ -32,15 +34,17 @@ class TogoIDConverter:
         self.api_base_url = (api_base_url or self.DEFAULT_API_URL).rstrip('/')
 
     def _make_request(self, endpoint: str, method: str = 'GET', params: Optional[Dict] = None,
-                      json_data: Optional[Dict] = None) -> Any:
+                      json_data: Optional[Dict] = None,
+                      form_data: Optional[Dict] = None) -> Any:
         """
         Make HTTP request to API
 
         Args:
             endpoint: API endpoint path
             method: HTTP method (GET or POST)
-            params: Query parameters
-            json_data: JSON data for POST requests
+            params: Query parameters (GET only; ignored for POST when form_data/json_data given)
+            json_data: JSON body for POST requests
+            form_data: application/x-www-form-urlencoded body for POST requests
 
         Returns:
             Response data (parsed JSON or text)
@@ -51,7 +55,12 @@ class TogoIDConverter:
             if method == 'GET':
                 resp = requests.get(url, params=params, timeout=30)
             elif method == 'POST':
-                resp = requests.post(url, json=json_data, params=params, timeout=30)
+                if form_data is not None:
+                    resp = requests.post(url, data=form_data, timeout=30)
+                elif json_data is not None:
+                    resp = requests.post(url, json=json_data, timeout=30)
+                else:
+                    resp = requests.post(url, data=params, timeout=30)
             else:
                 raise ValueError(f"Unsupported method: {method}")
 
@@ -70,6 +79,8 @@ class TogoIDConverter:
             raise RuntimeError(f"API Error ({status_code}): {e}") from e
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"API Error: {e}") from e
+
+    _local_id = staticmethod(_local_id_helper)
 
     def _add_annotations(
         self,
@@ -137,7 +148,8 @@ class TogoIDConverter:
 
             for row in table_data:
                 if isinstance(row, list) and len(row) > dataset_index:
-                    ids_to_annotate.add(str(row[dataset_index]))
+                    # GRASP is keyed by raw DB IDs; strip any CURIE prefix (PR #149).
+                    ids_to_annotate.add(self._local_id(str(row[dataset_index])))
 
             if not ids_to_annotate:
                 continue
@@ -175,7 +187,7 @@ class TogoIDConverter:
                     for dataset_name, field_name, allowed_values in filter:
                         dataset_index = route.index(dataset_name)
                         if len(row) > dataset_index:
-                            id_value = str(row[dataset_index])
+                            id_value = self._local_id(str(row[dataset_index]))
                             annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
 
                             # Check if value matches any allowed value
@@ -203,7 +215,7 @@ class TogoIDConverter:
                             annotations_to_insert[dataset_index] = []
 
                         if len(row) > dataset_index:
-                            id_value = str(row[dataset_index])
+                            id_value = self._local_id(str(row[dataset_index]))
                             annotation_value = annotations_cache.get(dataset_name, {}).get(id_value, {}).get(field_name, "")
                             # Handle list values
                             if isinstance(annotation_value, list):
@@ -239,6 +251,7 @@ class TogoIDConverter:
         format: str = 'json',
         annotate: Optional[List[Tuple[str, str]]] = None,
         filter: Optional[List[Tuple[str, str, List[str]]]] = None,
+        prefix: bool = True,
         **kwargs
     ) -> Any:
         """
@@ -250,6 +263,9 @@ class TogoIDConverter:
             format: Output format - 'json' (default), 'dict', 'table', or 'dataframe'
             annotate: Optional list of (dataset_name, field_name) tuples to add annotations
             filter: Optional list of (dataset_name, field_name, allowed_values) tuples to filter results
+            prefix: If True (default), let the API format IDs with their dataset
+                prefix (CURIE, e.g. 'GO:0005634'); requires togoid-api PR #149.
+                If False, request raw IDs by sending prefix=no.
             **kwargs: Additional parameters (report, limit, offset, etc.)
 
         Returns:
@@ -265,6 +281,12 @@ class TogoIDConverter:
         }
         params.update(kwargs)
 
+        # prefix=False opts out of the API's CURIE formatting (PR #149), requesting
+        # raw IDs. prefix=True (default) sends nothing, letting the API apply its
+        # default (prefixed once ?prefix ships; raw on today's production API).
+        if not prefix:
+            params['prefix'] = 'no'
+
         # Set report parameter based on format and whether annotations/filters are requested
         if 'report' not in params:
             if annotate or filter or len(route) >= 3:
@@ -272,9 +294,10 @@ class TogoIDConverter:
             elif format in ('dict', 'table', 'dataframe'):
                 params['report'] = 'pair'
 
-        # Get API response with route suggestion on error
+        # Get API response with route suggestion on error.
+        # POST + form encoding lets us send large ID lists without hitting URL-length limits.
         try:
-            response = self._make_request('/convert', 'GET', params=params)
+            response = self._make_request('/convert', 'POST', form_data=params)
         except RuntimeError as e:
             # Check if it's a connection error (400 Bad Request or similar)
             error_str = str(e)
@@ -384,6 +407,11 @@ class TogoIDConverter:
         Returns:
             2D array with [source_id, target_id, ...] rows
         """
+        # Preserve None as Python None (missing mapping) instead of stringifying
+        # it to "None". DataFrame conversion then promotes None -> pd.NA.
+        def _cell(v):
+            return None if v is None else str(v)
+
         result = []
 
         # Handle TogoID API response format with 'results' key
@@ -392,11 +420,9 @@ class TogoIDConverter:
             if isinstance(results_data, list):
                 for item in results_data:
                     if isinstance(item, list):
-                        # Already a list, convert all elements to strings
-                        result.append([str(elem) for elem in item])
+                        result.append([_cell(elem) for elem in item])
                     else:
-                        # Single value
-                        result.append([str(item)])
+                        result.append([_cell(item)])
             return result
 
         # Handle simple list format
@@ -404,24 +430,23 @@ class TogoIDConverter:
             # Handle list format (e.g., [[source, target], ...] or [[source, target, annotation], ...])
             for item in response:
                 if isinstance(item, list):
-                    # Convert all elements to strings
-                    result.append([str(elem) for elem in item])
+                    result.append([_cell(elem) for elem in item])
                 elif isinstance(item, dict):
                     # Handle dict items within list
                     for key, value in item.items():
                         if isinstance(value, list):
                             for v in value:
-                                result.append([str(key), str(v)])
+                                result.append([_cell(key), _cell(v)])
                         else:
-                            result.append([str(key), str(value)])
+                            result.append([_cell(key), _cell(value)])
         elif isinstance(response, dict):
             # Handle dictionary format (not TogoID API format)
             for source_id, targets in response.items():
                 if isinstance(targets, list):
                     for target_id in targets:
-                        result.append([str(source_id), str(target_id)])
+                        result.append([_cell(source_id), _cell(target_id)])
                 else:
-                    result.append([str(source_id), str(targets)])
+                    result.append([_cell(source_id), _cell(targets)])
 
         return result
 
@@ -472,7 +497,7 @@ class TogoIDConverter:
                     dataset_index = route.index(dataset_name)
                     if dataset_index not in annotations_map:
                         annotations_map[dataset_index] = []
-                    annotations_map[dataset_index].append(f"{dataset_name} {field_name}")
+                    annotations_map[dataset_index].append(f"{dataset_name}.{field_name}")
 
                 # Build column names by inserting annotations after their dataset columns
                 for i, dataset_name in enumerate(route):
@@ -481,19 +506,24 @@ class TogoIDConverter:
                     if i in annotations_map:
                         col_names.extend(annotations_map[i])
 
-                df = pd.DataFrame(table_data, columns=col_names)
+                df = pd.DataFrame(table_data, columns=col_names, dtype=object)
             else:
                 # Without annotations: use route names
                 if num_cols == len(route):
-                    df = pd.DataFrame(table_data, columns=route)
+                    df = pd.DataFrame(table_data, columns=route, dtype=object)
                 elif num_cols < len(route):
                     # Fewer columns than route (e.g., only target IDs with report='target')
                     # Use the last N dataset names from the route
-                    df = pd.DataFrame(table_data, columns=route[-num_cols:])
+                    df = pd.DataFrame(table_data, columns=route[-num_cols:], dtype=object)
                 else:
                     # More columns than route (shouldn't happen, but handle it)
                     col_names = route + [f'col_{i}' for i in range(len(route), num_cols)]
-                    df = pd.DataFrame(table_data, columns=col_names)
+                    df = pd.DataFrame(table_data, columns=col_names, dtype=object)
+
+        # Promote any missing cell (None / NaN) to pd.NA for a consistent
+        # missing-value sentinel in DataFrame output.
+        if not df.empty:
+            df = df.where(df.notna(), pd.NA)
         return df
 
     def count(self, src: str, dst: str, ids: List[str], link: Optional[str] = None) -> Dict:
@@ -512,7 +542,7 @@ class TogoIDConverter:
         params = {'ids': ','.join(ids)}
         if link:
             params['link'] = link
-        return self._make_request(f'/count/{src}-{dst}', 'GET', params=params)
+        return self._make_request(f'/count/{src}-{dst}', 'POST', form_data=params)
 
     def search_databases(self, name: str) -> List[str]:
         """
@@ -653,9 +683,12 @@ class TogoIDConverter:
             if len(parts) == 2:
                 src, dst = parts
 
-                # If source matches, add target to list
+                # If source matches (forward link), add target to list
                 if src == source:
                     targets.append(dst)
+                # If destination matches (reverse link), add source to list
+                if dst == source:
+                    targets.append(src)
 
         # Remove duplicates and sort
         return sorted(set(targets))
@@ -797,19 +830,24 @@ class TogoIDConverter:
 
         intermediate_ids: List[str] = []
         intermediate_to_sources: Dict[str, List[str]] = {}
+        # Prefixed IDs (PR #149) are matched across calls by their raw local ID,
+        # while the original (prefixed) form is kept for display.
+        intermediate_display: Dict[str, str] = {}
         intermediate_seen = set()
 
         for pair in forward_pairs:
             if isinstance(pair, list) and len(pair) >= 2:
                 source_id = str(pair[0])
                 intermediate_id = str(pair[1])
-                if intermediate_id not in intermediate_seen:
+                key = self._local_id(intermediate_id)
+                if key not in intermediate_seen:
                     intermediate_ids.append(intermediate_id)
-                    intermediate_seen.add(intermediate_id)
+                    intermediate_seen.add(key)
+                    intermediate_display[key] = intermediate_id
 
-                if intermediate_id not in intermediate_to_sources:
-                    intermediate_to_sources[intermediate_id] = []
-                intermediate_to_sources[intermediate_id].append(source_id)
+                if key not in intermediate_to_sources:
+                    intermediate_to_sources[key] = []
+                intermediate_to_sources[key].append(source_id)
 
         # Step 2: Reverse conversion (e.g., homologene -> ncbigene)
         reverse_route = list(reversed(route))
@@ -832,16 +870,16 @@ class TogoIDConverter:
 
         # Extract target IDs from reverse conversion
         target_ids = set()
-        # Build mapping: intermediate_id -> [target_ids]
+        # Build mapping: intermediate local id -> [target_ids (display form)]
         intermediate_to_targets: Dict[str, List[str]] = {}
         for pair in reverse_pairs:
             if isinstance(pair, list) and len(pair) >= 2:
-                intermediate_id = str(pair[0])
+                interm_key = self._local_id(str(pair[0]))
                 target_id = str(pair[1])
                 target_ids.add(target_id)
-                if intermediate_id not in intermediate_to_targets:
-                    intermediate_to_targets[intermediate_id] = []
-                intermediate_to_targets[intermediate_id].append(target_id)
+                if interm_key not in intermediate_to_targets:
+                    intermediate_to_targets[interm_key] = []
+                intermediate_to_targets[interm_key].append(target_id)
 
         # Step 3: Convert target IDs to taxonomy
         taxonomy_route = [route[0], 'taxonomy']  # Use source database -> taxonomy
@@ -854,21 +892,23 @@ class TogoIDConverter:
 
         taxonomy_pairs = taxonomy_result.get('results', [])
 
-        # Build mapping: target_id -> taxonomy_id
+        # Build mapping: target local id -> taxonomy_id (display form)
         target_to_taxonomy: Dict[str, str] = {}
         for pair in taxonomy_pairs:
             if isinstance(pair, list) and len(pair) >= 2:
-                target_id = str(pair[0])
+                target_key = self._local_id(str(pair[0]))
                 taxonomy_id = str(pair[1])
-                target_to_taxonomy[target_id] = taxonomy_id
+                target_to_taxonomy[target_key] = taxonomy_id
 
-        # Step 4: Filter by target_taxids
+        # Step 4: Filter by target_taxids (compare on raw local id; output stays prefixed)
+        target_taxid_keys = {self._local_id(str(t)) for t in target_taxids}
         filtered_results = []
-        for intermediate_id, target_id_list in intermediate_to_targets.items():
+        for interm_key, target_id_list in intermediate_to_targets.items():
+            intermediate_id = intermediate_display.get(interm_key, interm_key)
             for target_id in target_id_list:
-                taxonomy_id = target_to_taxonomy.get(target_id)
-                if taxonomy_id in target_taxids:
-                    source_ids = intermediate_to_sources.get(intermediate_id, [])
+                taxonomy_id = target_to_taxonomy.get(self._local_id(target_id))
+                if taxonomy_id is not None and self._local_id(taxonomy_id) in target_taxid_keys:
+                    source_ids = intermediate_to_sources.get(interm_key, [])
                     if not source_ids:
                         # Should not happen, but keep explicit placeholder
                         filtered_results.append(["", intermediate_id, target_id, taxonomy_id])
