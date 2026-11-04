@@ -16,6 +16,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
 
+from ._ids import local_id
+
 
 # Default endpoints
 DEFAULT_API_ENDPOINT = os.environ.get(
@@ -146,7 +148,8 @@ class AnnotationsConverter:
         ids: List[str],
         fields: Iterable[str],
         filters: Optional[Dict[str, List[str]]] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        format: str = "dict",
+    ) -> Any:
         if filters is None:
             filters = {}
 
@@ -154,8 +157,19 @@ class AnnotationsConverter:
         if not deduped_ids:
             raise ValueError("At least one identifier is required.")
 
+        # GRASP is keyed by raw DB IDs. Accept prefixed CURIEs (togoid-api PR #149)
+        # by querying with the raw local id, while mapping results back to the
+        # caller's original id form. No-op on already-raw ids.
+        query_ids: List[str] = []
+        local_to_original: Dict[str, str] = {}
+        for original in deduped_ids:
+            local = local_id(original)
+            if local not in local_to_original:
+                local_to_original[local] = original
+                query_ids.append(local)
+
         query, variables = self.build_query(dataset_name, fields, filters)
-        variables["id"] = deduped_ids
+        variables["id"] = query_ids
         for key, value in filters.items():
             variables[key] = list(dict.fromkeys(value))
 
@@ -183,10 +197,45 @@ class AnnotationsConverter:
             identifier = entry.get("id")
             if identifier is None:
                 continue
+            # GRASP returns raw IDs; map back to the caller's original id form.
+            identifier = local_to_original.get(identifier, identifier)
             # ID フィールドは呼び出し側で扱うため、ここでは格納しない。
             result[identifier] = {
                 key: value for key, value in entry.items() if key != "id"
             }
+
+        if format == "dataframe":
+            try:
+                import pandas as pd
+            except ImportError:
+                raise ImportError(
+                    "pandas is required for dataframe format. "
+                    "Install with: pip install pandas"
+                )
+
+            data_fields = [f for f in fields if f != "id"]
+
+            # Detect list-typed fields so we can normalize "missing" cells to []
+            list_fields = {
+                f for f in data_fields
+                if any(isinstance(rec.get(f), list) for rec in result.values())
+            }
+
+            rows = []
+            for id_val in deduped_ids:
+                record = result.get(id_val, {})
+                row: Dict[str, Any] = {"id": id_val}
+                for field in data_fields:
+                    value = record.get(field)
+                    if value is None:
+                        row[field] = [] if field in list_fields else None
+                    else:
+                        row[field] = value
+                rows.append(row)
+
+            if not rows:
+                return pd.DataFrame()
+            return pd.DataFrame(rows)
 
         return result
 

@@ -13,6 +13,7 @@ from typing import Optional, List
 from .converter import TogoIDConverter
 from .annotations import AnnotationsConverter, parse_filters, load_ids, ensure_fields, output_table, output_json
 from .label_converter import LabelConverter, parse_labels, output_results
+from .enrichment.cli import add_enrich_parser, handle_enrich
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -37,6 +38,9 @@ Examples:
 
   # Get configuration
   togoid config dataset ncbigene
+
+  # Enrichment analysis of a gene list
+  togoid enrich --genes "CD3D,CD3E,LCK,ZAP70" --preset reactome
         """
     )
 
@@ -60,6 +64,9 @@ Examples:
     convert_parser.add_argument('--filter', action='append', nargs=3, metavar=('DATASET', 'FIELD', 'VALUES'),
                                 help='Filter by annotation value (dataset field values). Values should be comma-separated.')
     convert_parser.add_argument('--output', help='Output file path')
+    convert_parser.add_argument('--raw', action='store_true',
+                                help='Return raw IDs without dataset prefixes (sends prefix=no). '
+                                     'By default the API formats IDs as CURIEs, e.g. GO:0005634.')
 
     # ========== LABEL2ID subcommand ==========
     label2id_parser = subparsers.add_parser('label2id', help='Convert labels to IDs')
@@ -167,6 +174,10 @@ Examples:
                                  default='table', help='Output format (default: table)')
     ortholog_parser.add_argument('--output', help='Output file path')
 
+    # ========== ENRICH subcommand ==========
+    # Defined in togoid.enrichment.cli so the feature stays self-contained.
+    add_enrich_parser(subparsers)
+
     return parser
 
 
@@ -196,6 +207,10 @@ def handle_convert(args, converter: TogoIDConverter):
     # Set report parameter (automatically set to 'full' if annotate/filter used)
     if not (args.annotate or args.filter):
         kwargs['report'] = args.report
+
+    # --raw opts out of the API's CURIE prefixing (PR #149)
+    if getattr(args, 'raw', False):
+        kwargs['prefix'] = False
 
     result = converter.convert(route, ids, **kwargs)
 
@@ -425,6 +440,9 @@ def main():
         elif args.command == 'get-ortholog':
             converter = TogoIDConverter(api_base_url=api_url)
             return handle_get_ortholog(args, converter)
+
+        elif args.command == 'enrich':
+            return handle_enrich(args, api_url)
 
         elif args.command == 'config':
             converter = TogoIDConverter(api_base_url=api_url)

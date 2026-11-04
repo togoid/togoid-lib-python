@@ -13,6 +13,7 @@ Python library and CLI tool for biological database ID conversion and annotation
 - **Multiple Formats**: Support for JSON, CSV, TSV, dict, table, and pandas DataFrame
 - **Dual Interface**: Use as Python library or command-line tool
 - **Comprehensive**: Search databases, find routes, get configurations
+- **Enrichment Analysis**: Turn any conversion route into gene sets, test them for over-representation, and draw the result on a single-cell UMAP
 
 ## Installation
 
@@ -175,6 +176,38 @@ togoid config dataset ncbigene
 togoid config descriptions
 togoid count ncbigene ensembl_gene --ids 1,9
 ```
+
+## ID Prefixes (CURIE format)
+
+The TogoID API can format converted IDs with their dataset prefix (CURIE), e.g.
+`0005634` → `GO:0005634`, `217124` → `ORPHA:217124`. This is the **default** output
+of `convert()`:
+
+```python
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full")
+# -> [['ORPHA:217124', 'P23284', 'GO:0005737'], ...]
+```
+
+Pass `prefix=False` (CLI: `--raw`) to get raw IDs without prefixes:
+
+```python
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full", prefix=False)
+# -> [['217124', 'P23284', '0005737'], ...]
+```
+
+```bash
+togoid convert --route orphanet_gene,uniprot,go --ids 217124 --report full --raw
+```
+
+Notes:
+
+- Prefixing requires the server-side `?prefix` support ([togoid-api PR #149](https://github.com/togoid/togoid-api/pull/149)).
+  Against API deployments that predate it, output is raw regardless of `prefix`.
+- `annotate` / `filter` and `get_ortholog` transparently handle prefixed IDs: the
+  library matches on the raw local ID internally, so joins keep working while the
+  displayed IDs stay prefixed.
+- `label2id` (`LabelConverter`) returns raw identifiers — it resolves labels via
+  PubDictionaries / SPARQList, which are not covered by the API's `?prefix`.
 
 ## Breaking Changes
 
@@ -407,6 +440,42 @@ for id, annotations in result.items():
     print(f"{id}: {annotations}")
 ```
 
+### Enrichment analysis and UMAP visualisation
+
+A TogoID route that ends in an annotation dataset *is* a gene-set library: every
+term it reaches becomes a set of the input genes that map to it.
+
+```python
+from togoid.enrichment import build_gene_sets, enrich_clusters, plot_umap_enrichment
+
+# Only the route changes between annotation databases:
+#   ["ncbigene", "uniprot", "reactome_pathway"]  Reactome pathways
+#   ["ncbigene", "uniprot", "go"]                GO terms
+#   ["ncbigene", "medgen", "mondo"]              MONDO diseases
+# Any other route TogoID can reach works the same way. The three above also
+# have shortcuts: reactome_gene_sets(), go_gene_sets(), mondo_gene_sets().
+library = build_gene_sets(
+    all_marker_genes,
+    route=["ncbigene", "uniprot", "reactome_pathway"],
+)
+
+# Hypergeometric test per cluster, Benjamini-Hochberg corrected.
+results = enrich_clusters(markers_per_cluster, library)
+
+fig = plot_umap_enrichment(embedding, results, top_n=3)
+fig.savefig("umap_enrichment.pdf")
+
+# The same terms as a table: these filters are the ones the figure used, so the
+# two cannot disagree.
+results.significant(0.05).top(3).to_tsv("umap_enrichment.tsv")
+```
+
+![UMAP with enriched Reactome pathways](https://raw.githubusercontent.com/suimye/togoid-lib-python/docs-figures/umap_enrichment_reactome.png)
+
+See [docs/enrichment.md](docs/enrichment.md), and
+[examples/scRNAseq_enrichment/](examples/scRNAseq_enrichment/) for a runnable
+pipeline on real data.
+
 ## Command-Line Interface
 
 ### Convert Command
@@ -429,21 +498,21 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
 
 ```bash
 # Basic conversion
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxon 9606
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxonomy 9606
 togoid label2id --dataset chebi --labels 'caffeine' --label_types 'togoid_chebi_label'
 
 # From file
 echo -e "BRCA1\nTP53\nEGFR" > genes.txt
-togoid label2id --dataset ncbigene --label-file genes.txt --taxon 9606
+togoid label2id --dataset ncbigene --label-file genes.txt --taxonomy 9606
 
 # CSV output
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --format csv --output results.csv
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --format csv --output results.csv
 
 # With PubDictionaries (for non-gene labels)
 togoid label2id --dataset chebi --labels "breast cancer" --label_types "togoid_mondo_label"
 
 # Verbose mode
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxon 9606 --verbose
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --verbose
 ```
 
 ### Annotate Command
@@ -513,17 +582,19 @@ Main class for ID conversion operations.
 
 ### LabelConverter
 
-Main class for converting biological labels to database IDs with automatic API detection.
+Main class for converting biological labels to database IDs. The upstream API is selected from the dataset configuration.
 
 **Methods:**
 - `convert(labels, dataset, label_types=None, tags=None, threshold=0.5, preferred_dictionary=None, taxonomy=None, format='json')` - Convert labels to IDs (auto-selects API based on dataset config)
 - `convert_pubdictionaries(labels, dictionaries, tags=None, threshold=0.5, preferred_dictionary=None)` - Convert using PubDictionaries API
 - `convert_sparqlist(labels, sparqlist, label_types, taxonomy=None)` - Convert using SPARQList API
 
-**Auto-detection Logic:**
-- If labels are gene symbols (non-numeric) → Uses SPARQList API for ncbigene
-- If labels are numeric IDs or other formats → Uses PubDictionaries API
-- ncbigene regex pattern is fetched from TogoID API dynamically
+**API selection:**
+- The dataset's `label_resolver` configuration is fetched from the TogoID API
+  (`/config/dataset`) and decides which upstream to use — it is not inferred from
+  the labels themselves.
+- `label_resolver.sparqlist` present → SPARQList (e.g. `ncbigene`)
+- otherwise → PubDictionaries (e.g. `chebi`, `mondo`)
 
 ### AnnotationsConverter
 
@@ -709,7 +780,13 @@ togoid --api-url http://localhost:5000 convert --ids 1,9 --route ncbigene,ensemb
 
 - Python 3.7+
 - requests >= 2.20.0
-- pandas >= 1.0.0 (optional, for DataFrame format)
+- pandas >= 1.0.0 (optional, for DataFrame format and `togoid[enrichment]`)
+- matplotlib >= 3.5 (optional, for the UMAP figures; `togoid[plot]`)
+- scanpy >= 1.9 and leidenalg >= 0.9 (optional, for the scRNA-seq example;
+  `togoid[singlecell]`)
+
+The enrichment analysis itself runs on a bare install: the hypergeometric test
+and the BH-FDR correction use only the standard library.
 
 ## Testing
 
@@ -721,7 +798,15 @@ python3 test_readme_examples.py
 
 # Test CLI examples
 bash test_cli_examples.sh
+
+# Test the enrichment analysis (no network access required)
+python3 test_enrichment.py
+
+# Test the enrichment analysis against the live TogoID API
+python3 test_enrichment_api.py
 ```
+
+See [TESTING.md](TESTING.md) for what each script covers.
 
 ## License
 
