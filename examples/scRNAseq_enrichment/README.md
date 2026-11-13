@@ -16,20 +16,26 @@ build_gene_sets(genes, route=["ncbigene", "medgen", "mondo"])
 
 ## Data
 
-The example uses the 10x Genomics public PBMC dataset. It is **not** included in
-this repository; download it from 10x Genomics and note the licence terms on
-their site.
+The figures here come from **pbmc4k**, the 4,340-cell PBMC dataset distributed by
+the Bioconductor package
+[TENxPBMCData](https://bioconductor.org/packages/TENxPBMCData/). The R version of
+this example fetches it and writes the counts out in 10x format, which is what
+this example reads:
 
 ```bash
-mkdir -p data && cd data
-# Pick any "Filtered feature-barcode matrix (MTX)" PBMC dataset from
-# https://www.10xgenomics.com/datasets and unpack it here, so that you end up
-# with a directory containing barcodes.tsv.gz, features.tsv.gz and matrix.mtx.gz
-tar -xzf filtered_feature_bc_matrix.tar.gz
+# In the togoid-lib-r checkout; needs R with BiocManager::install("TENxPBMCData")
+Rscript inst/examples/scRNAseq_enrichment/01_clustering.R pbmc4k r_results
+# -> r_results/01_matrix_10x/{barcodes,features,matrix}.{tsv,mtx}.gz
 ```
 
-Any 10x-format directory works, as does any other dataset scanpy can read — only
-step 1 touches the raw data.
+Starting both languages from that one directory is what makes their numbers
+directly comparable; it is also how the cross-language checks in this repository
+are run.
+
+If you have no R to hand, any 10x-format directory works, as does any other
+dataset scanpy can read — pick a "Filtered feature-barcode matrix (MTX)" PBMC
+dataset from <https://www.10xgenomics.com/datasets> and unpack it. The numbers
+will differ from the ones shown here. Only step 1 touches the raw data.
 
 ## Requirements
 
@@ -216,6 +222,8 @@ togoid enrich --clusters-file results/02_markers.csv \
 
 ## Licence note
 
-The 10x Genomics PBMC data is distributed by 10x Genomics under their own terms.
-Check the licence on the dataset page before redistributing it or the results
-derived from it. Nothing from that dataset is included in this repository.
+pbmc4k is 10x Genomics data redistributed by the `TENxPBMCData` package; see that
+package for its terms. If you supply your own matrix from
+[10x Genomics](https://www.10xgenomics.com/datasets) instead, check the licence
+on its dataset page before redistributing it or results derived from it. No
+counts are included in this repository.
