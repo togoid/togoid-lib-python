@@ -141,7 +141,7 @@ echo "Testing: Label2ID from file"
 echo -e "BRCA1\nTP53\nEGFR" > /tmp/test_genes.txt
 test_command \
     "Label2ID from file" \
-    "timeout 15 python3 -m togoid label2id --label-file /tmp/test_genes.txt --dataset ncbigene --taxonomy 9606" \
+    "timeout 15 python3 -m togoid label2id --labels-file /tmp/test_genes.txt --dataset ncbigene --taxonomy 9606" \
     "672"
 rm -f /tmp/test_genes.txt
 
@@ -151,13 +151,13 @@ test_command \
     "input,match_type"
 
 test_command \
-    "Label2ID with custom label_types" \
-    "timeout 15 python3 -m togoid label2id --labels 'BRCA1' --dataset ncbigene --label_types 'symbol' --taxonomy 9606" \
+    "Label2ID with custom label-types" \
+    "timeout 15 python3 -m togoid label2id --labels 'BRCA1' --dataset ncbigene --label-types 'symbol' --taxonomy 9606" \
     "672"
 
 test_command \
     "Label2ID for ChEBI dataset" \
-    "timeout 15 python3 -m togoid label2id --labels 'caffeine' --dataset chebi --label_types 'togoid_chebi_label'" \
+    "timeout 15 python3 -m togoid label2id --labels 'caffeine' --dataset chebi --label-types 'togoid_chebi_label'" \
     "caffeine"
 
 # Annotate Command Examples
@@ -224,7 +224,7 @@ test_command \
 # Test convert with filtering
 test_command \
     "Convert with Filtering" \
-    "timeout 30 python3 -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript --format table --annotate ncbigene label --filter ensembl_transcript transcript_flag 'MANE Select'" \
+    "timeout 30 python3 -m togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript --format table --annotate ncbigene label --filter ensembl_transcript transcript_flag='MANE Select'" \
     ""
 
 # Test get-ortholog

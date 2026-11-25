@@ -152,7 +152,7 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
   --format table \
   --annotate ncbigene label \
-  --filter ensembl_transcript transcript_flag "MANE Select"
+  --filter ensembl_transcript transcript_flag="MANE Select"
 
 # Get Orthologs
 togoid get-ortholog --ids 672,7157 \
@@ -499,17 +499,17 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
 ```bash
 # Basic conversion
 togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxonomy 9606
-togoid label2id --dataset chebi --labels 'caffeine' --label_types 'togoid_chebi_label'
+togoid label2id --dataset chebi --labels 'caffeine' --label-types 'togoid_chebi_label'
 
-# From file
-echo -e "BRCA1\nTP53\nEGFR" > genes.txt
-togoid label2id --dataset ncbigene --label-file genes.txt --taxonomy 9606
+# From file (one label per line; commas are kept as part of the label)
+printf "BRCA1\nTP53\nEGFR\n" > genes.txt
+togoid label2id --dataset ncbigene --labels-file genes.txt --taxonomy 9606
 
 # CSV output
 togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --format csv --output results.csv
 
 # With PubDictionaries (for non-gene labels)
-togoid label2id --dataset chebi --labels "breast cancer" --label_types "togoid_mondo_label"
+togoid label2id --dataset chebi --labels "breast cancer" --label-types "togoid_mondo_label"
 
 # Verbose mode
 togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --verbose
@@ -653,21 +653,23 @@ togoid convert --ids 1,9 \
 
 #### ID Conversion with Filtering
 
-Filter results by annotation values:
+Filter results by annotation values with `--filter DATASET FIELD=VALUES`
+(multiple values are comma-separated; `annotate` uses the same `FIELD=VALUES`
+form without the dataset):
 
 ```bash
 # Filter by single value
 togoid convert --ids 1,9 \
   --route ncbigene,ensembl_gene,ensembl_transcript \
   --format table \
-  --filter ensembl_transcript transcript_flag "MANE Select"
+  --filter ensembl_transcript transcript_flag="MANE Select"
 
 # Combine annotations and filtering
 togoid convert --ids 1,9 \
   --route ncbigene,ensembl_gene,ensembl_transcript \
   --format table \
   --annotate ncbigene label \
-  --filter ensembl_transcript transcript_flag "MANE Select"
+  --filter ensembl_transcript transcript_flag="MANE Select"
 ```
 
 #### Ortholog Retrieval
@@ -694,10 +696,19 @@ Table output columns are `[source_id, homologene_id, target_id, taxonomy_id]`.
 
 ### Input/Output Options
 
+Conventions shared by all subcommands:
+
+- Lists given on the command line (`--ids`, `--labels`, `--route`, ...) are comma-separated.
+- List files (`--ids-file`, `--labels-file`, `--genes-file`) hold one entry per line; pass `-` to read from stdin.
+- Short options: `-i` (list file), `-o` (`--output`), `-f` (`--format`), `-d` (`--dataset`), `-r` (`--route`).
+
 ```bash
-# Read IDs from file
-echo "1\n9\n672" > ids.txt
+# Read IDs from file (one ID per line; also available for count and get-ortholog)
+printf "1\n9\n672\n" > ids.txt
 togoid convert --ids-file ids.txt --route ncbigene,ensembl_gene
+
+# Read IDs from stdin, using short options
+cut -f1 genes.tsv | togoid convert -i - -r ncbigene,ensembl_gene -f table -o result.tsv
 
 # Save output to file
 togoid convert --ids 1,9 --route ncbigene,ensembl_gene --output result.json

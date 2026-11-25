@@ -9,6 +9,7 @@ import json
 import sys
 from typing import Dict, List, Optional, Sequence
 
+from .._inputs import read_list_file
 from .analysis import enrich_clusters
 from .genesets import GeneSetLibrary, build_gene_sets
 from .presets import GO_ASPECTS, ROUTES
@@ -37,7 +38,8 @@ def add_enrich_parser(subparsers) -> None:
         "--genes", help='Comma-separated gene symbols (e.g. "CD3D,MS4A1,LYZ")'
     )
     source.add_argument(
-        "--genes-file", help="File with one gene symbol per line (a single query)"
+        "--genes-file", "-i",
+        help="File with one gene symbol per line, or - for stdin (a single query)",
     )
     source.add_argument(
         "--clusters-file",
@@ -48,7 +50,7 @@ def add_enrich_parser(subparsers) -> None:
     )
 
     parser.add_argument(
-        "--route",
+        "--route", "-r",
         help=(
             'Comma-separated TogoID route, e.g. "ncbigene,uniprot,reactome_pathway". '
             "Mutually exclusive with --preset."
@@ -95,9 +97,9 @@ def add_enrich_parser(subparsers) -> None:
         "--load-genesets",
         help="Reuse a gene-set library written by --save-genesets instead of querying the API",
     )
-    parser.add_argument("--output", help="Write results to this CSV file (default: stdout)")
+    parser.add_argument("--output", "-o", help="Write results to this CSV file (default: stdout)")
     parser.add_argument(
-        "--format",
+        "--format", "-f",
         choices=["csv", "tsv", "json", "summary"],
         default="csv",
         help="Output format (default: csv)",
@@ -114,9 +116,8 @@ def add_enrich_parser(subparsers) -> None:
 
 
 def _read_gene_file(path: str) -> List[str]:
-    """Read a plain-text gene list, one symbol per line."""
-    with open(path, "r", encoding="utf-8") as handle:
-        return [line.strip() for line in handle if line.strip()]
+    """Read a plain-text gene list, one symbol per line (``-`` reads stdin)."""
+    return read_list_file(path)
 
 
 def _read_clusters_file(

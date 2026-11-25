@@ -12,7 +12,9 @@ import json
 import os
 import sys
 from itertools import product
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+
+from ._inputs import read_list_file
 
 import requests
 
@@ -315,36 +317,46 @@ class AnnotationsConverter:
         return header, rows
 
 
+def parse_filter_condition(raw: str) -> Tuple[str, List[str]]:
+    """Parse one 'field=value1,value2' filter condition into (field, values)."""
+    if "=" not in raw:
+        raise ValueError(
+            f"Invalid filter '{raw}'. Expected format 'field=value1,value2'."
+        )
+    field, value = raw.split("=", 1)
+    field = field.strip()
+    values = [v.strip() for v in value.split(",") if v.strip()]
+    if not field or not values:
+        raise ValueError(
+            f"Invalid filter '{raw}'. Fields and values must be non-empty."
+        )
+    return field, values
+
+
 def parse_filters(filter_args: Optional[List[str]]) -> Dict[str, List[str]]:
     filters: Dict[str, List[str]] = {}
     if not filter_args:
         return filters
 
     for raw in filter_args:
-        if "=" not in raw:
-            raise ValueError(
-                f"Invalid filter '{raw}'. Expected format 'field=value1,value2'."
-            )
-        field, value = raw.split("=", 1)
-        field = field.strip()
-        values = [v.strip() for v in value.split(",") if v.strip()]
-        if not field or not values:
-            raise ValueError(
-                f"Invalid filter '{raw}'. Fields and values must be non-empty."
-            )
+        field, values = parse_filter_condition(raw)
         filters.setdefault(field, []).extend(values)
 
     return filters
 
 
-def load_ids(ids: List[str], ids_file: Optional[str]) -> List[str]:
-    collected: List[str] = list(ids)
+def load_ids(ids: Union[str, List[str], None], ids_file: Optional[str]) -> List[str]:
+    """Collect IDs from a comma-separated string (or list of them) and/or a file
+    (one ID per line; ``-`` reads standard input)."""
+    if ids is None:
+        ids = []
+    elif isinstance(ids, str):
+        ids = [ids]
+    collected: List[str] = [
+        token.strip() for item in ids for token in item.split(",") if token.strip()
+    ]
     if ids_file:
-        with open(ids_file, "r", encoding="utf-8") as handle:
-            for line in handle:
-                token = line.strip()
-                if token:
-                    collected.append(token)
+        collected.extend(read_list_file(ids_file))
     return collected
 
 
@@ -428,9 +440,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dataset", required=True, help="Dataset key (e.g. ncbigene).")
     parser.add_argument(
         "--ids",
-        nargs="*",
-        default=[],
-        help="Identifiers to resolve. Repeat or separate by space.",
+        help="Comma-separated identifiers to resolve.",
     )
     parser.add_argument(
         "--ids-file",

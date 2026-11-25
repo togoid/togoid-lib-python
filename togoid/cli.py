@@ -11,8 +11,10 @@ import os
 from typing import Optional, List
 
 from .converter import TogoIDConverter
-from .annotations import AnnotationsConverter, parse_filters, load_ids, ensure_fields, output_table, output_json
+from .annotations import AnnotationsConverter, parse_filters, parse_filter_condition, load_ids, ensure_fields, output_table, output_json
 from .label_converter import LabelConverter, parse_labels, output_results
+from ._inputs import read_list_file
+from . import __version__
 from .enrichment.cli import add_enrich_parser, handle_enrich
 
 
@@ -31,7 +33,7 @@ Examples:
   togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
 
   # Convert labels to IDs (PubDictionaries)
-  togoid label2id --labels "caffeine" --dataset chebi --label_types "togoid_chebi_label"
+  togoid label2id --labels "caffeine" --dataset chebi --label-types "togoid_chebi_label"
 
   # Get annotations
   togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym
@@ -44,26 +46,28 @@ Examples:
         """
     )
 
-    parser.add_argument('--version', action='version', version='%(prog)s 1.0.0')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('--api-url', type=str, help='TogoID API base URL')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
     # ========== CONVERT subcommand ==========
     convert_parser = subparsers.add_parser('convert', help='Convert IDs between databases')
-    convert_parser.add_argument('--route', required=True, help='Comma-separated route (e.g., "refseq_rna,uniprot")')
-    convert_parser.add_argument('--ids', required=True, help='Comma-separated IDs to convert')
+    convert_parser.add_argument('--route', '-r', required=True, help='Comma-separated route (e.g., "refseq_rna,uniprot")')
+    convert_parser.add_argument('--ids', help='Comma-separated IDs to convert')
+    convert_parser.add_argument('--ids-file', '-i', help='File containing IDs (one per line; - for stdin)')
     convert_parser.add_argument('--report', choices=['target', 'all', 'pair', 'full'], default='target',
                                 help='Report format (default: target)')
-    convert_parser.add_argument('--format', choices=['json', 'csv', 'tsv', 'dict', 'table', 'dataframe'],
+    convert_parser.add_argument('--format', '-f', choices=['json', 'csv', 'tsv', 'dict', 'table', 'dataframe'],
                                 default='json', help='Output format (default: json)')
     convert_parser.add_argument('--limit', type=int, help='Limit number of results')
     convert_parser.add_argument('--offset', type=int, help='Offset for results')
     convert_parser.add_argument('--annotate', action='append', nargs=2, metavar=('DATASET', 'FIELD'),
                                 help='Add annotation column (dataset field). Can be used multiple times.')
-    convert_parser.add_argument('--filter', action='append', nargs=3, metavar=('DATASET', 'FIELD', 'VALUES'),
-                                help='Filter by annotation value (dataset field values). Values should be comma-separated.')
-    convert_parser.add_argument('--output', help='Output file path')
+    convert_parser.add_argument('--filter', action='append', nargs=2, metavar=('DATASET', 'FIELD=VALUES'),
+                                help='Filter by annotation value (format: dataset field=value1,value2). '
+                                     'Can be used multiple times.')
+    convert_parser.add_argument('--output', '-o', help='Output file path')
     convert_parser.add_argument('--raw', action='store_true',
                                 help='Return raw IDs without dataset prefixes (sends prefix=no). '
                                      'By default the API formats IDs as CURIEs, e.g. GO:0005634.')
@@ -72,13 +76,14 @@ Examples:
     label2id_parser = subparsers.add_parser('label2id', help='Convert labels to IDs')
     label_input = label2id_parser.add_mutually_exclusive_group(required=True)
     label_input.add_argument('--labels', help='Comma-separated labels')
-    label_input.add_argument('--label-file', help='File containing labels (one per line or comma-separated)')
+    label_input.add_argument('--labels-file', '-i',
+                             help='File containing labels (one per line; commas are kept as part of the label; - for stdin)')
 
     # Dataset argument (required)
-    label2id_parser.add_argument('--dataset', required=True, help='Dataset name (e.g., ncbigene)')
+    label2id_parser.add_argument('--dataset', '-d', required=True, help='Dataset name (e.g., ncbigene)')
 
     # Label types argument (used for both SPARQList and PubDictionaries)
-    label2id_parser.add_argument('--label_types',
+    label2id_parser.add_argument('--label-types',
                                  help='Label types or dictionary names (comma-separated, uses dataset config if not specified)')
 
     # SPARQList specific options
@@ -91,16 +96,16 @@ Examples:
     label2id_parser.add_argument('--preferred-dictionary', help='Preferred dictionary for synonym resolution')
 
     # Output options
-    label2id_parser.add_argument('--format', choices=['json', 'csv', 'tsv'], default='json',
+    label2id_parser.add_argument('--format', '-f', choices=['json', 'csv', 'tsv'], default='json',
                                  help='Output format (default: json)')
-    label2id_parser.add_argument('--output', help='Output file path')
+    label2id_parser.add_argument('--output', '-o', help='Output file path')
     label2id_parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
 
     # ========== ANNOTATE subcommand ==========
     annotate_parser = subparsers.add_parser('annotate', help='Get annotations for IDs')
-    annotate_parser.add_argument('--dataset', required=True, help='Dataset key (e.g. ncbigene)')
-    annotate_parser.add_argument('--ids', nargs='*', default=[], help='IDs to annotate')
-    annotate_parser.add_argument('--ids-file', help='File containing IDs (one per line)')
+    annotate_parser.add_argument('--dataset', '-d', required=True, help='Dataset key (e.g. ncbigene)')
+    annotate_parser.add_argument('--ids', help='Comma-separated IDs to annotate')
+    annotate_parser.add_argument('--ids-file', '-i', help='File containing IDs (one per line; - for stdin)')
     annotate_parser.add_argument('--field', dest='fields', action='append',
                                  help='Annotation field to include (repeat for multiple)')
     annotate_parser.add_argument('--include-label', action='store_true',
@@ -109,7 +114,7 @@ Examples:
                                  help='Filter by annotation values (format: field=value1,value2)')
     annotate_parser.add_argument('--list-fields', action='store_true',
                                  help='List available fields and exit')
-    annotate_parser.add_argument('--format', choices=['table', 'csv', 'json'], default='table',
+    annotate_parser.add_argument('--format', '-f', choices=['table', 'csv', 'json'], default='table',
                                  help='Output format (default: table)')
     annotate_parser.add_argument('--delimiter', default='\t', help='Delimiter for table/CSV')
     annotate_parser.add_argument('--compact', action='store_true',
@@ -147,7 +152,8 @@ Examples:
     count_parser = subparsers.add_parser('count', help='Count mappings between databases')
     count_parser.add_argument('src', help='Source database')
     count_parser.add_argument('dst', help='Destination database')
-    count_parser.add_argument('--ids', required=True, help='Comma-separated IDs')
+    count_parser.add_argument('--ids', help='Comma-separated IDs')
+    count_parser.add_argument('--ids-file', '-i', help='File containing IDs (one per line; - for stdin)')
     count_parser.add_argument('--link', help='Link name')
 
     # ========== CONFIG subcommand ==========
@@ -164,15 +170,19 @@ Examples:
     config_subparsers.add_parser('descriptions', help='Get database descriptions')
     config_subparsers.add_parser('statistics', help='Get database statistics')
     config_subparsers.add_parser('taxonomy', help='Get taxonomy list')
+    config_list_targets_parser = config_subparsers.add_parser(
+        'list-targets', help='List datasets reachable from a source dataset in one hop')
+    config_list_targets_parser.add_argument('src', help='Source dataset (e.g., ncbigene)')
 
     # ========== GET-ORTHOLOG subcommand ==========
     ortholog_parser = subparsers.add_parser('get-ortholog', help='Get orthologs via round-trip conversion')
-    ortholog_parser.add_argument('--ids', required=True, help='Comma-separated source IDs')
-    ortholog_parser.add_argument('--route', required=True, help='Comma-separated route (e.g., "ncbigene,homologene")')
+    ortholog_parser.add_argument('--ids', help='Comma-separated source IDs')
+    ortholog_parser.add_argument('--ids-file', '-i', help='File containing source IDs (one per line; - for stdin)')
+    ortholog_parser.add_argument('--route', '-r', required=True, help='Comma-separated route (e.g., "ncbigene,homologene")')
     ortholog_parser.add_argument('--target-taxids', required=True, help='Comma-separated target taxonomy IDs (e.g., "10090,10116")')
-    ortholog_parser.add_argument('--format', choices=['json', 'csv', 'tsv', 'dict', 'table', 'dataframe'],
+    ortholog_parser.add_argument('--format', '-f', choices=['json', 'csv', 'tsv', 'dict', 'table', 'dataframe'],
                                  default='table', help='Output format (default: table)')
-    ortholog_parser.add_argument('--output', help='Output file path')
+    ortholog_parser.add_argument('--output', '-o', help='Output file path')
 
     # ========== ENRICH subcommand ==========
     # Defined in togoid.enrichment.cli so the feature stays self-contained.
@@ -181,10 +191,22 @@ Examples:
     return parser
 
 
+class CLIInputError(Exception):
+    """Invalid command-line input; reported without a traceback."""
+
+
+def get_ids(args) -> List[str]:
+    """Collect IDs from --ids (comma-separated) and --ids-file (one per line)."""
+    ids = load_ids(args.ids, args.ids_file)
+    if not ids:
+        raise CLIInputError("No identifiers provided. Use --ids or --ids-file.")
+    return ids
+
+
 def handle_convert(args, converter: TogoIDConverter):
     """Handle convert command"""
     route = [r.strip() for r in args.route.split(',')]
-    ids = [i.strip() for i in args.ids.split(',')]
+    ids = get_ids(args)
 
     kwargs = {'format': args.format}
     if args.limit is not None:
@@ -199,8 +221,11 @@ def handle_convert(args, converter: TogoIDConverter):
     # Handle filter option
     if args.filter:
         filter_list = []
-        for dataset, field, values in args.filter:
-            value_list = [v.strip() for v in values.split(',')]
+        for dataset, condition in args.filter:
+            try:
+                field, value_list = parse_filter_condition(condition)
+            except ValueError as exc:
+                raise CLIInputError(str(exc)) from exc
             filter_list.append((dataset, field, value_list))
         kwargs['filter'] = filter_list
 
@@ -239,8 +264,8 @@ def handle_label2id(args, api_url: str):
     if args.labels:
         labels = parse_labels(args.labels)
     else:
-        with open(args.label_file, 'r', encoding='utf-8') as f:
-            labels = parse_labels(f.read())
+        # One label per line: labels may themselves contain commas
+        labels = read_list_file(args.labels_file)
 
     # Create converter
     converter = LabelConverter(verbose=args.verbose, api_base_url=api_url)
@@ -272,7 +297,7 @@ def handle_label2id(args, api_url: str):
 
 def handle_get_ortholog(args, converter: TogoIDConverter):
     """Handle get-ortholog command"""
-    ids = [i.strip() for i in args.ids.split(',')]
+    ids = get_ids(args)
     route = [r.strip() for r in args.route.split(',')]
     target_taxids = [t.strip() for t in args.target_taxids.split(',')]
 
@@ -333,7 +358,11 @@ def handle_annotate(args, api_url: str):
             print(f"  - {descriptor}")
         return 0
 
-    filters = parse_filters(args.filters)
+    try:
+        filters = parse_filters(args.filters)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     try:
         fields = ensure_fields(args.fields, field_catalog, args.include_label)
@@ -341,9 +370,10 @@ def handle_annotate(args, api_url: str):
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    ids = load_ids(args.ids, args.ids_file)
-    if not ids:
-        print("Error: No identifiers provided. Use --ids or --ids-file.", file=sys.stderr)
+    try:
+        ids = get_ids(args)
+    except CLIInputError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     try:
@@ -433,7 +463,7 @@ def main():
 
         elif args.command == 'count':
             converter = TogoIDConverter(api_base_url=api_url)
-            ids = [i.strip() for i in args.ids.split(',')]
+            ids = get_ids(args)
             result = converter.count(args.src, args.dst, ids, args.link)
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -459,6 +489,8 @@ def main():
                 result = converter.config_statistics()
             elif args.config_type == 'taxonomy':
                 result = converter.config_taxonomy()
+            elif args.config_type == 'list-targets':
+                result = converter.config_list_targets(args.src)
             else:
                 parser.parse_args(['config', '--help'])
                 return 1
@@ -466,6 +498,9 @@ def main():
 
     except KeyboardInterrupt:
         print("\nInterrupted by user", file=sys.stderr)
+        return 1
+    except CLIInputError as e:
+        print(f"Error: {e}", file=sys.stderr)
         return 1
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

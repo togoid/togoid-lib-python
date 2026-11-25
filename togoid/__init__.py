@@ -11,5 +11,10 @@ from .converter import TogoIDConverter
 from .annotations import AnnotationsConverter
 from .label_converter import LabelConverter
 
-__version__ = "1.0.0"
+try:
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    __version__ = _pkg_version("togoid")
+except PackageNotFoundError:  # running from a source tree without installation
+    __version__ = "unknown"
 __all__ = ["TogoIDConverter", "AnnotationsConverter", "LabelConverter"]
