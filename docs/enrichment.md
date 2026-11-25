@@ -29,7 +29,8 @@ build_gene_sets(genes, route=["ncbigene", "uniprot", "go"])                # GO 
 build_gene_sets(genes, route=["ncbigene", "medgen", "mondo"])              # diseases
 ```
 
-Anything TogoID can reach works the same way. Use `togoid route --src ... --dst ...`
+Anything TogoID can reach works the same way. Use `togoid route SRC DST`
+(e.g. `togoid route ncbigene mondo`), `togoid config list-targets ncbigene`
 or `converter.config_list_targets("ncbigene")` to find a route, and if you pass
 one that does not exist the error names the alternatives:
 
@@ -481,8 +482,8 @@ togoid enrich --genes-file genes.txt --preset reactome --taxonomy 10090
 
 | Option | Description |
 |---|---|
-| `--genes`, `--genes-file`, `--clusters-file` | Input (mutually exclusive) |
-| `--route`, `--preset` | Which annotation database to use |
+| `--genes`, `--genes-file` (`-i`), `--clusters-file` | Input (mutually exclusive); `-i -` reads the gene list from stdin |
+| `--route` (`-r`), `--preset` | Which annotation database to use |
 | `--go-aspect` | GO aspect when `--preset go` |
 | `--taxonomy` | Taxonomy for symbol resolution (default 9606) |
 | `--id-source` | `symbol` (default) or `id` |
@@ -490,7 +491,7 @@ togoid enrich --genes-file genes.txt --preset reactome --taxonomy 10090
 | `--min-set-size`, `--max-set-size` | Term size bounds |
 | `--fdr`, `--top` | Narrow the exported table |
 | `--save-genesets`, `--load-genesets` | Cache the library |
-| `--output`, `--format` | `csv` (default), `json` or `summary` |
+| `--output` (`-o`), `--format` (`-f`) | `csv` (default), `json` or `summary` |
 
 ## API reference
 
