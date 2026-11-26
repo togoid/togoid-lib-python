@@ -13,7 +13,7 @@ Python script that tests all the Python library examples from README.md.
 **Run the tests:**
 
 ```bash
-python3 test_readme_examples.py
+python3 tests/test_readme_examples.py
 ```
 
 **What it tests:**
@@ -50,9 +50,9 @@ Bash script that tests all CLI examples from README.md.
 **Run the tests:**
 
 ```bash
-bash test_cli_examples.sh
+bash tests/test_cli_examples.sh
 # or
-./test_cli_examples.sh
+./tests/test_cli_examples.sh
 ```
 
 **What it tests:**
@@ -86,69 +86,7 @@ Warnings: X
 All critical tests passed!
 ```
 
-### Feature-Specific Test Files
-
-The following test files validate specific features and bug fixes:
-
-### 3. `test_customer_feedback.py`
-
-Tests format output improvements from initial customer feedback.
-
-**What it tests:**
-- Dict format returns proper structure with ids, route, results
-- Table format includes source-target pairs
-- DataFrame format uses dataset names as column headers
-- Annotation columns appear in correct positions
-
-**Run:**
-```bash
-python3 test_customer_feedback.py
-```
-
-### 4. `test_config_list_targets.py`
-
-Tests the `config_list_targets()` method for finding reachable datasets.
-
-**What it tests:**
-- Retrieving list of datasets reachable from a source in one hop
-- Return type is a list of strings
-- Works for various datasets (ncbigene, ensembl_gene, etc.)
-
-**Run:**
-```bash
-python3 test_config_list_targets.py
-```
-
-### 5. `test_feedback_fixes.py`
-
-Tests customer feedback improvements including route handling and parameter changes.
-
-**What it tests:**
-- Routes with 3+ datasets use `report=full` to show all intermediate IDs
-- `format="dict"` raises error for routes with 3+ datasets
-- `label_types` parameter accepts list format
-- `annotator.execute_query()` filters parameter is optional
-
-**Run:**
-```bash
-python3 test_feedback_fixes.py
-```
-
-### 6. `test_route_suggestion.py`
-
-Tests the route suggestion feature for error handling.
-
-**What it tests:**
-- Error messages suggest alternative routes when datasets aren't connected
-- Suggestions include 2-hop and 3-hop routes
-- Error handling for invalid dataset pairs
-
-**Run:**
-```bash
-python3 test_route_suggestion.py
-```
-
-### 7. `test_enrichment.py`
+### 3. `test_enrichment.py`
 
 Tests `togoid.enrichment` without touching the network. Safe to run in CI.
 
@@ -165,7 +103,7 @@ Tests `togoid.enrichment` without touching the network. Safe to run in CI.
 
 **Run:**
 ```bash
-python3 test_enrichment.py
+python3 tests/test_enrichment.py
 ```
 
 **Expected output:**
@@ -185,7 +123,7 @@ Test Results: 102 passed, 0 failed
 ============================================================
 ```
 
-### 8. `test_enrichment_api.py`
+### 4. `test_enrichment_api.py`
 
 Tests `togoid.enrichment` against the live TogoID API, checking that the
 documented routes still work and that the results stay biologically sensible.
@@ -206,7 +144,7 @@ documented routes still work and that the results stay biologically sensible.
 
 **Run:**
 ```bash
-python3 test_enrichment_api.py
+python3 tests/test_enrichment_api.py
 ```
 
 **Expected output:**
@@ -228,7 +166,7 @@ Test Results: 42 passed, 0 failed, 0 warnings
 ============================================================
 ```
 
-### 9. End-to-end example pipeline
+### 5. End-to-end example pipeline
 
 `examples/scRNAseq_enrichment/` runs the whole use case on real data. It is not
 part of the automated suite — it needs a downloaded 10x dataset and takes a few
@@ -276,51 +214,38 @@ Sanity checks worth making on the output:
 ### Test only Python library functionality
 
 ```bash
-python3 test_readme_examples.py
+python3 tests/test_readme_examples.py
 ```
 
 ### Test only CLI functionality
 
 ```bash
-bash test_cli_examples.sh
+bash tests/test_cli_examples.sh
 ```
 
 ### Test both core scripts
 
 ```bash
-python3 test_readme_examples.py && bash test_cli_examples.sh
-```
-
-### Test all feature-specific tests
-
-```bash
-python3 test_customer_feedback.py && \
-python3 test_config_list_targets.py && \
-python3 test_feedback_fixes.py && \
-python3 test_route_suggestion.py
+python3 tests/test_readme_examples.py && bash tests/test_cli_examples.sh
 ```
 
 ### Test the enrichment analysis
 
 ```bash
 # Offline only (no network access needed)
-python3 test_enrichment.py
+python3 tests/test_enrichment.py
 
 # Including the live API tests
-python3 test_enrichment.py && python3 test_enrichment_api.py
+python3 tests/test_enrichment.py && python3 tests/test_enrichment_api.py
 ```
 
 ### Test everything
 
 ```bash
-python3 test_readme_examples.py && \
-bash test_cli_examples.sh && \
-python3 test_customer_feedback.py && \
-python3 test_config_list_targets.py && \
-python3 test_feedback_fixes.py && \
-python3 test_route_suggestion.py && \
-python3 test_enrichment.py && \
-python3 test_enrichment_api.py
+python3 tests/test_readme_examples.py && \
+bash tests/test_cli_examples.sh && \
+python3 tests/test_enrichment.py && \
+python3 tests/test_enrichment_api.py
 ```
 
 ## Understanding Test Results

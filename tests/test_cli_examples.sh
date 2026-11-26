@@ -2,7 +2,7 @@
 # Test script to verify all CLI examples from README.md work correctly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 
 # Use development API endpoint if specified; default to staging domain during development
 export TOGOID_API_ENDPOINT="${TOGOID_API_ENDPOINT:-https://api.togoid.dbcls.jp.il3c.com}"

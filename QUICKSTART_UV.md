@@ -75,10 +75,10 @@ togoid convert --ids 1,9 --route ncbigene,ensembl_gene
 
 ```bash
 # Python library tests
-python3 test_readme_examples.py
+python3 tests/test_readme_examples.py
 
 # CLI tests
-bash test_cli_examples.sh
+bash tests/test_cli_examples.sh
 ```
 
 ### Add new dependencies

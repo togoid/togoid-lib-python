@@ -5,6 +5,12 @@ This script tests all the Python library examples from README.md
 to ensure they work as expected.
 """
 
+import os as _os
+import sys as _sys
+
+# Make the package at the repository root importable without installing it.
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 import sys
 import os
 from typing import List, Dict, Any

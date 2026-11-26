@@ -805,16 +805,16 @@ This package includes comprehensive test scripts to verify all functionality:
 
 ```bash
 # Test Python library examples
-python3 test_readme_examples.py
+python3 tests/test_readme_examples.py
 
 # Test CLI examples
-bash test_cli_examples.sh
+bash tests/test_cli_examples.sh
 
 # Test the enrichment analysis (no network access required)
-python3 test_enrichment.py
+python3 tests/test_enrichment.py
 
 # Test the enrichment analysis against the live TogoID API
-python3 test_enrichment_api.py
+python3 tests/test_enrichment_api.py
 ```
 
 See [TESTING.md](TESTING.md) for what each script covers.

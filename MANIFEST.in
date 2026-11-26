@@ -1,7 +1,7 @@
 # What goes into the source distribution.
 # The wheel is built from [tool.setuptools] packages, so this only shapes the
 # sdist: ship the package and the documents a user needs, leave out the
-# development scripts that live at the repository root.
+# development scripts (tests/, tasks/).
 
 include LICENSE
 include README.md
@@ -10,9 +10,8 @@ recursive-include togoid py.typed
 recursive-include docs *.md
 recursive-include examples *.py *.md *.sh
 
-exclude test_*.py
-exclude test_*.sh
 exclude PROJECT_STRUCTURE.md
 exclude CHANGELOG_SUMMARY.md
 exclude QUICKSTART_UV.md
+prune tests
 prune tasks

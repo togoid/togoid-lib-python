@@ -26,10 +26,13 @@ togoid-lib-python/
 ├── docs/
 │   └── enrichment.md          # Enrichment analysis manual
 │
-├── test_readme_examples.py    # Python library tests
-├── test_cli_examples.sh       # CLI tests
-├── test_enrichment.py         # Enrichment tests (offline)
-├── test_enrichment_api.py     # Enrichment tests (TogoID API)
+├── tests/
+│   ├── test_readme_examples.py    # Python library tests
+│   ├── test_cli_examples.sh       # CLI tests
+│   ├── test_enrichment.py         # Enrichment tests (offline)
+│   ├── test_enrichment_api.py     # Enrichment tests (TogoID API)
+│   └── test_round*.py, test_additional_feedback.py  # Feedback regression checks
+│
 ├── TESTING.md                 # Testing documentation
 ├── README.md                  # Main documentation
 ├── pyproject.toml             # Package configuration
@@ -164,14 +167,14 @@ togoid config dataset ncbigene
 
 ```bash
 # Test Python library
-python3 test_readme_examples.py
+python3 tests/test_readme_examples.py
 
 # Test CLI
-bash test_cli_examples.sh
+bash tests/test_cli_examples.sh
 
 # Test enrichment (offline, then against the live API)
-python3 test_enrichment.py
-python3 test_enrichment_api.py
+python3 tests/test_enrichment.py
+python3 tests/test_enrichment_api.py
 ```
 
 See [TESTING.md](TESTING.md) for detailed testing documentation.

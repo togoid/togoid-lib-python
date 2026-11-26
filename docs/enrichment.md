@@ -568,7 +568,7 @@ Log space avoids overflow at genome scale (`N ≈ 20000` would otherwise overflo
 the factorials), and summing the smallest terms first avoids losing them to
 rounding when the p-value is very small. The results agree with
 `scipy.stats.hypergeom.sf` to better than 1e-9 relative error across the range
-the package is tested on; `test_enrichment.py` checks this whenever SciPy is
+the package is tested on; `tests/test_enrichment.py` checks this whenever SciPy is
 installed.
 
 **Multiple testing.** `benjamini_hochberg` applies the standard BH step-up
