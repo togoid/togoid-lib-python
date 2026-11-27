@@ -26,10 +26,12 @@ def add_enrich_parser(subparsers) -> None:
     """
     parser = subparsers.add_parser(
         "enrich",
-        help="Enrichment analysis of gene lists via a TogoID route",
+        help="Enrichment analysis of gene lists via a TogoID route (experimental)",
         description=(
             "Convert a gene list along a TogoID route into gene sets, then test "
-            "for over-representation with a hypergeometric test and BH-FDR."
+            "for over-representation with a hypergeometric test and BH-FDR. "
+            "This is an experimental, illustrative extension built on TogoID, "
+            "not part of its core functionality; its options may change."
         ),
     )
 

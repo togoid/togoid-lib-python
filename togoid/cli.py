@@ -42,6 +42,7 @@ Examples:
   togoid config dataset ncbigene
 
   # Enrichment analysis of a gene list
+  # (experimental example built on TogoID, not part of its core functionality)
   togoid enrich --genes "CD3D,CD3E,LCK,ZAP70" --preset reactome
         """
     )
