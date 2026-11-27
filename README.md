@@ -2,419 +2,146 @@
 
 Python library and CLI tool for biological database ID conversion and annotation using [TogoID](https://togoid.dbcls.jp/).
 
+```python
+from togoid import TogoIDConverter
+
+TogoIDConverter().convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="table")
+# [['1', 'ENSG00000121410'], ['9', 'ENSG00000171428']]
+```
+
+```bash
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format table
+```
+
 ## Features
 
-- **ID Conversion**: Convert IDs between biological databases
-- **ID Conversion with Annotations**: Add annotation columns during conversion
-- **ID Conversion with Filtering**: Filter conversion results by annotation values
-- **Ortholog Retrieval**: Get orthologs through round-trip conversion and taxonomy filtering
-- **Label to ID**: Convert biological labels (gene names, etc.) to database IDs with dataset-based API selection
-- **Annotations**: Get labels and annotations for database IDs
-- **Multiple Formats**: Support for JSON, CSV, TSV, dict, table, and pandas DataFrame
-- **Dual Interface**: Use as Python library or command-line tool
-- **Comprehensive**: Search databases, find routes, get configurations
-- **Enrichment Analysis**: Turn any conversion route into gene sets, test them for over-representation, and draw the result on a single-cell UMAP
+- **ID conversion** between biological databases along any TogoID route
+- **Annotations and filtering**: add annotation columns to conversion results, or keep only rows matching annotation values
+- **Ortholog retrieval** through round-trip conversion and taxonomy filtering
+- **Label to ID**: resolve labels (gene symbols, compound or disease names) to database IDs
+- **Annotations** (labels and other fields) for database IDs
+- Output as JSON, CSV, TSV, dict, table, or pandas DataFrame
+- Usable as a Python library or as the `togoid` command-line tool
 
 ## Installation
 
-### Using uv (recommended - faster)
-
-[uv](https://github.com/astral-sh/uv) is a blazingly fast Python package installer and resolver (10-100x faster than pip).
-
 ```bash
-# Install uv (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone and setup
 git clone https://github.com/togoid/togoid-lib-python.git
 cd togoid-lib-python
 
-# Create virtual environment and install
+# With uv (recommended)
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install the package
 uv pip install -e .
 
-# With pandas support
-uv pip install -e ".[pandas]"
-
-# With development tools
-uv pip install -e ".[dev]"
-```
-
-**💡 Tip:** See [QUICKSTART_UV.md](QUICKSTART_UV.md) for a detailed uv quick start guide.
-
-### Using pip (traditional)
-
-```bash
-# From source
-git clone https://github.com/togoid/togoid-lib-python.git
-cd togoid-lib-python
+# Or with pip
 pip install -e .
-
-# With pandas support
-pip install -e ".[pandas]"
 ```
 
-## Quick Start
+Optional extras (combine as needed, e.g. `".[pandas,dev]"`):
 
-### As a Python Library
+| Extra | Adds | Needed for |
+|---|---|---|
+| `pandas` | pandas | `format="dataframe"` |
+| `dev` | test tools | development |
 
-```python
-from togoid import TogoIDConverter, AnnotationsConverter, LabelConverter
+See [QUICKSTART_UV.md](QUICKSTART_UV.md) for more on uv.
 
-# ID Conversion
-converter = TogoIDConverter()
-
-# JSON format (default)
-result = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"])
-
-# Dict format
-result_dict = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dict")
-# Output: {'ids': ['1', '9'], 'route': ['ncbigene', 'ensembl_gene'], 'results': {'1': ['ENSG00000121410'], '9': ['ENSG00000171428']}}
-
-# Table format
-result_table = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="table")
-# Output: [["1", "ENSG00000121410"], ["9", "ENSG00000075624"]]
-
-# DataFrame format (requires pandas)
-result_df = converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dataframe")
-
-# ID Conversion with Annotations
-result_with_annotations = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
-    format="table",
-    annotate=[("ncbigene", "label")]  # Add ncbigene label as annotation column
-)
-
-# ID Conversion with Filtering
-result_filtered = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
-    format="table",
-    annotate=[("ncbigene", "label")],
-    filter=[("ensembl_transcript", "transcript_flag", ["MANE Select"])]  # Only MANE Select transcripts
-)
-
-# Get Orthologs
-orthologs = converter.get_ortholog(
-    ids=["1", "9"],
-    route=["ncbigene", "homologene"],
-    target_taxids=["10090", "10116"]  # Mouse and Rat
-)
-
-# Label to ID Conversion
-label_converter = LabelConverter()
-
-# Convert labels with dataset specification
-results = label_converter.convert(
-    labels=["BRCA1", "TP53"],
-    dataset="ncbigene",
-    taxonomy="9606"  # Human
-)
-
-# Convert labels for other datasets
-results = label_converter.convert(
-    labels=["caffeine"],
-    dataset="chebi",
-    label_types=["togoid_chebi_label"]
-)
-
-# Get Annotations
-annotator = AnnotationsConverter()
-annotations = annotator.execute_query(
-    dataset_name="ncbigene",
-    ids=["672", "7157"],
-    fields=["label", "gene_synonym"],
-    filters={}
-)
-```
-
-### As a Command-Line Tool
-
-```bash
-# Basic ID Conversion
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene
-
-# Convert with different output formats
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format table
-
-# ID Conversion with Annotations
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --annotate ncbigene label \
-  --annotate ncbigene full_name
-
-# ID Conversion with Filtering
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --annotate ncbigene label \
-  --filter ensembl_transcript transcript_flag="MANE Select"
-
-# Get Orthologs
-togoid get-ortholog --ids 672,7157 \
-  --route ncbigene,homologene \
-  --target-taxids 10090,10116 \
-  --format table
-
-# Label to ID Conversion
-togoid label2id --labels "BRCA1,TP53,EGFR" --dataset ncbigene --taxonomy 9606
-
-# Get Annotations
-togoid annotate --dataset ncbigene --ids 672,7157 \
-  --field gene_synonym \
-  --field full_name
-
-# List available annotation fields
-togoid annotate --dataset ncbigene --list-fields
-
-# Configuration
-togoid config dataset ncbigene
-togoid config descriptions
-togoid count ncbigene ensembl_gene --ids 1,9
-```
-
-## ID Prefixes (CURIE format)
-
-The TogoID API can format converted IDs with their dataset prefix (CURIE), e.g.
-`0005634` → `GO:0005634`, `217124` → `ORPHA:217124`. This is the **default** output
-of `convert()`:
-
-```python
-converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full")
-# -> [['ORPHA:217124', 'P23284', 'GO:0005737'], ...]
-```
-
-Pass `prefix=False` (CLI: `--raw`) to get raw IDs without prefixes:
-
-```python
-converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full", prefix=False)
-# -> [['217124', 'P23284', '0005737'], ...]
-```
-
-```bash
-togoid convert --route orphanet_gene,uniprot,go --ids 217124 --report full --raw
-```
-
-Notes:
-
-- Prefixing requires the server-side `?prefix` support ([togoid-api PR #149](https://github.com/togoid/togoid-api/pull/149)).
-  Against API deployments that predate it, output is raw regardless of `prefix`.
-- `annotate` / `filter` and `get_ortholog` transparently handle prefixed IDs: the
-  library matches on the raw local ID internally, so joins keep working while the
-  displayed IDs stay prefixed.
-- `label2id` (`LabelConverter`) returns raw identifiers — it resolves labels via
-  PubDictionaries / SPARQList, which are not covered by the API's `?prefix`.
-
-## Breaking Changes
-
-### Version 0.2.0+
-
-**1. label_types parameter now requires list format**
-
-The `label_types` parameter in `LabelConverter.convert()` has been changed from string to list type.
-
-```python
-# ❌ Old (will not work)
-label_converter.convert(
-    labels=["BRCA1"],
-    dataset="ncbigene",
-    label_types="symbol,synonym"  # String format
-)
-
-# ✅ New (correct)
-label_converter.convert(
-    labels=["BRCA1"],
-    dataset="ncbigene",
-    label_types=["symbol", "synonym"]  # List format
-)
-```
-
-**2. format="dict" deprecated for routes with 3+ datasets**
-
-When using routes with 3 or more datasets, `format="dict"` is no longer supported. Use `format="table"` or `format="dataframe"` instead.
-
-```python
-# ❌ Old (will raise error)
-converter.convert(
-    ids=["1"],
-    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
-    format="dict"
-)
-
-# ✅ New (correct)
-converter.convert(
-    ids=["1"],
-    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
-    format="table"  # or "dataframe"
-)
-```
-
-**3. annotator.execute_query filters parameter is now optional**
-
-The `filters` parameter in `AnnotationsConverter.execute_query()` is now optional and defaults to an empty dictionary.
-
-```python
-# Both work now
-annotations = annotator.execute_query(
-    dataset_name="ncbigene",
-    ids=["672"],
-    fields=["label"],
-    filters={}  # Can be omitted
-)
-
-annotations = annotator.execute_query(
-    dataset_name="ncbigene",
-    ids=["672"],
-    fields=["label"]  # No filters parameter needed
-)
-```
-
-## Usage Examples
+## Python Usage
 
 ### ID Conversion
-
-#### Different Output Formats
 
 ```python
 from togoid import TogoIDConverter
 
 converter = TogoIDConverter()
 
-# JSON (default) - raw API response
-json_result = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene"]
-)
-
-# Dict - Includes ids, route, and results mapping {source_id: [target_ids]}
-dict_result = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene"],
-    format="dict"
-)
-
-# Table - [[source_id, target_id], ...] 2D array
-table_result = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene"],
-    format="table"
-)
-
-# DataFrame - pandas DataFrame with source_id and target_id columns
-df_result = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene"],
-    format="dataframe"
-)
+# Output formats
+converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"])                       # JSON (raw API response, default)
+converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dict")        # {'ids': [...], 'route': [...], 'results': {'1': ['ENSG00000121410'], ...}}
+converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="table")       # [[source_id, target_id], ...]
+converter.convert(ids=["1", "9"], route=["ncbigene", "ensembl_gene"], format="dataframe")   # pandas DataFrame
 ```
 
-#### ID Conversion with Annotations
+`format="dict"` is only available for two-dataset routes; use `table` or
+`dataframe` for routes of three or more datasets.
+
+#### Annotations and Filtering
+
+`annotate` adds annotation columns; `filter` keeps only rows whose annotation
+matches one of the given values.
 
 ```python
-# Add annotation columns to conversion results
 result = converter.convert(
     ids=["1", "9"],
     route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
     format="table",
     annotate=[
-        ("ncbigene", "label"),           # Add gene label from ncbigene
-        ("ncbigene", "full_name"),       # Add full gene name from ncbigene
-        ("ensembl_gene", "label")        # Add gene label from ensembl_gene
-    ]
-)
-# Result includes original conversion + 3 annotation columns
-```
-
-#### ID Conversion with Filtering
-
-```python
-# Filter conversion results by annotation values
-result = converter.convert(
-    ids=["1", "9"],
-    route=["ncbigene", "ensembl_gene", "ensembl_transcript"],
-    format="table",
-    annotate=[("ncbigene", "label")],
+        ("ncbigene", "label"),
+        ("ncbigene", "full_name"),
+    ],
     filter=[
-        ("ensembl_transcript", "transcript_flag", ["MANE Select"])
-    ]
+        ("ensembl_transcript", "transcript_flag", ["MANE Select"]),  # 15 transcripts -> 2
+    ],
 )
-# Only returns transcripts with "MANE Select" flag
-# 15 transcripts → 2 transcripts (filtered)
 ```
 
-#### Get Orthologs
+#### Orthologs
 
 ```python
-# Get orthologs through round-trip conversion and taxonomy filtering
-# Process: ncbigene -> homologene -> ncbigene -> taxonomy -> filter by taxid
+# ncbigene -> homologene -> ncbigene -> taxonomy, then filter by taxonomy ID
 result = converter.get_ortholog(
     ids=["1", "9"],                      # Human genes
-    route=["ncbigene", "homologene"],    # Via homologene
-    target_taxids=["10090", "10116"]     # Mouse and Rat
+    route=["ncbigene", "homologene"],
+    target_taxids=["10090", "10116"],    # Mouse and Rat
 )
-# Returns: [
-#   ['1', '11167', '117586', '10090'],   # source_id, homologene_id, mouse_gene_id, taxid
-#   ['1', '11167', '140656', '10116'],   # same source via same homologene group
-#   ['9', '37329', '116632', '10116'],
-#   ['9', '37329', '17961', '10090']
-# ]
-# Rows are ordered as: [source_id, homologene_id, target_gene_id, taxonomy_id]
+# [['1', '11167', '117586', '10090'],   # [source_id, homologene_id, target_gene_id, taxonomy_id]
+#  ['1', '11167', '140656', '10116'],
+#  ['9', '37329', '116632', '10116'],
+#  ['9', '37329', '17961', '10090']]
 ```
 
-#### Search and Route
+#### Exploring Datasets and Routes
 
 ```python
-# Search databases by name
-databases = converter.search_databases("uniprot")
-
-# Find routes between databases
-routes = converter.route(src="ncbigene", dst="uniprot", max_hops=3)
-
-# Lookup which tables contain an ID
-tables = converter.lookup_id("672")
+converter.search_databases("uniprot")                  # Search databases by name
+converter.search_id("NM_001110")                       # Databases whose ID pattern matches
+converter.lookup_id("672")                             # Tables that contain an ID
+converter.route(src="ncbigene", dst="uniprot", max_hops=3)
+converter.config_list_targets("ncbigene")              # Datasets reachable in one hop
+converter.count("ncbigene", "ensembl_gene", ids=["1", "9"])
 ```
 
-### Label to ID Conversion
+Configuration of the TogoID API is available through `config_dataset()`,
+`config_relation()`, `config_descriptions()`, `config_statistics()` and
+`config_taxonomy()`.
+
+### Label to ID
 
 ```python
 from togoid import LabelConverter
 
-converter = LabelConverter(verbose=True)
+label_converter = LabelConverter()
 
-# Convert gene symbols (uses SPARQList API based on dataset config)
-results = converter.convert(
-    labels=["BRCA1", "TP53", "EGFR"],
-    dataset="ncbigene",
-    taxonomy="9606"  # Human
-)
-# Returns: [{"input": "BRCA1", "match_type": "symbol", "symbol": "BRCA1", "identifier": "672"}, ...]
+# Gene symbols
+label_converter.convert(labels=["BRCA1", "TP53", "EGFR"], dataset="ncbigene", taxonomy="9606")
+# [{"input": "BRCA1", "match_type": "symbol", "symbol": "BRCA1", "identifier": "672"}, ...]
 
-# Convert chemical names (uses PubDictionaries API based on dataset config)
-results = converter.convert(
-    labels=["caffeine"],
-    dataset="chebi",
-    label_types=["togoid_chebi_label"]  # Optional: override dataset config (list format)
-)
+# Compound names
+label_converter.convert(labels=["caffeine"], dataset="chebi")
 
-# Convert disease names
-results = converter.convert(
-    labels=["breast cancer"],
-    dataset="mondo",
-    threshold=0.5  # PubDictionaries matching threshold
-)
+# Disease names, with a PubDictionaries matching threshold
+label_converter.convert(labels=["breast cancer"], dataset="mondo", threshold=0.5)
 
-# Label types are auto-configured from dataset, or can be manually specified (as list)
-results = converter.convert(
-    labels=["BRCA1"],
-    dataset="ncbigene",
-    label_types=["symbol"],  # Override: only search by symbol (list format)
-    taxonomy="9606"
-)
+# Override the label types configured for the dataset (must be a list)
+label_converter.convert(labels=["BRCA1"], dataset="ncbigene", label_types=["symbol"], taxonomy="9606")
 ```
+
+The upstream service is chosen from the dataset's `label_resolver`
+configuration in the TogoID API (`/config/dataset`), not from the labels
+themselves: SPARQList when `label_resolver.sparqlist` is present (e.g.
+`ncbigene`), PubDictionaries otherwise (e.g. `chebi`, `mondo`). To call one of
+them directly, use `convert_sparqlist()` or `convert_pubdictionaries()`.
 
 ### Annotations
 
@@ -423,398 +150,187 @@ from togoid import AnnotationsConverter
 
 annotator = AnnotationsConverter()
 
-# List available fields for a dataset
-fields = annotator.list_fields("ncbigene")
-for field_name, field_meta in fields:
+# Available fields for a dataset
+for field_name, field_meta in annotator.list_fields("ncbigene"):
     print(f"{field_name}: {field_meta['label']}")
 
-# Get annotations for IDs
+# Annotations for IDs (filters is optional)
 result = annotator.execute_query(
     dataset_name="ncbigene",
     ids=["672", "7157"],
     fields=["label", "gene_synonym", "type_of_gene"],
-    filters={"type_of_gene": ["protein-coding"]}
+    filters={"type_of_gene": ["protein-coding"]},
 )
-
 for id, annotations in result.items():
     print(f"{id}: {annotations}")
 ```
 
-### Enrichment analysis and UMAP visualisation
-
-A TogoID route that ends in an annotation dataset *is* a gene-set library: every
-term it reaches becomes a set of the input genes that map to it.
-
-```python
-from togoid.enrichment import build_gene_sets, enrich_clusters, plot_umap_enrichment
-
-# Only the route changes between annotation databases:
-#   ["ncbigene", "uniprot", "reactome_pathway"]  Reactome pathways
-#   ["ncbigene", "uniprot", "go"]                GO terms
-#   ["ncbigene", "medgen", "mondo"]              MONDO diseases
-# Any other route TogoID can reach works the same way. The three above also
-# have shortcuts: reactome_gene_sets(), go_gene_sets(), mondo_gene_sets().
-library = build_gene_sets(
-    all_marker_genes,
-    route=["ncbigene", "uniprot", "reactome_pathway"],
-)
-
-# Hypergeometric test per cluster, Benjamini-Hochberg corrected.
-results = enrich_clusters(markers_per_cluster, library)
-
-fig = plot_umap_enrichment(embedding, results, top_n=3)
-fig.savefig("umap_enrichment.pdf")
-
-# The same terms as a table: these filters are the ones the figure used, so the
-# two cannot disagree.
-results.significant(0.05).top(3).to_tsv("umap_enrichment.tsv")
-```
-
-![UMAP with enriched Reactome pathways](https://raw.githubusercontent.com/suimye/togoid-lib-python/docs-figures/umap_enrichment_reactome.png)
-
-See [docs/enrichment.md](docs/enrichment.md), and
-[examples/scRNAseq_enrichment/](examples/scRNAseq_enrichment/) for a runnable
-pipeline on real data.
-
-## Command-Line Interface
-
-### Convert Command
-
-```bash
-# Basic conversion
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene
-
-# With output format
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
-
-# Save to file
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format csv --output results.csv
-
-# With additional parameters
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair --limit 100
-```
-
-### Label2ID Command
-
-```bash
-# Basic conversion
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxonomy 9606
-togoid label2id --dataset chebi --labels 'caffeine' --label-types 'togoid_chebi_label'
-
-# From file (one label per line; commas are kept as part of the label)
-printf "BRCA1\nTP53\nEGFR\n" > genes.txt
-togoid label2id --dataset ncbigene --labels-file genes.txt --taxonomy 9606
-
-# CSV output
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --format csv --output results.csv
-
-# With PubDictionaries (for non-gene labels)
-togoid label2id --dataset chebi --labels "breast cancer" --label-types "togoid_mondo_label"
-
-# Verbose mode
-togoid label2id --dataset ncbigene --labels "BRCA1,TP53" --taxonomy 9606 --verbose
-```
-
-### Annotate Command
-
-```bash
-# Get annotations
-togoid annotate --dataset ncbigene --ids 672,7157 --field gene_synonym --field full_name
-
-# List available fields
-togoid annotate --dataset ncbigene --list-fields
-
-# With filters
-togoid annotate --dataset ncbigene --ids 672,7157 \
-    --field type_of_gene --field gene_synonym \
-    --filter type_of_gene=protein-coding
-
-# CSV output
-togoid annotate --dataset ncbigene --ids 672,7157 \
-    --field gene_synonym --format csv --output genes.csv
-
-# From file
-togoid annotate --dataset ncbigene --ids-file gene_ids.txt --field gene_synonym
-```
-
-### Other Commands
-
-```bash
-# Search databases
-togoid search databases uniprot
-togoid search id NM_001110
-
-# Lookup ID
-togoid lookup id 672
-
-# Find routes
-togoid route ncbigene uniprot --max-hops 3
-
-# Count mappings
-togoid count ncbigene ensembl_gene --ids 1,9
-
-# Get configuration
-togoid config dataset ncbigene
-togoid config relation ncbigene-ensembl_gene
-togoid config descriptions
-togoid config statistics
-togoid config taxonomy
-```
-
-## API Documentation
-
-### TogoIDConverter
-
-Main class for ID conversion operations.
-
-**Methods:**
-- `convert(route, ids, format='json', **kwargs)` - Convert IDs between databases
-- `count(src, dst, ids, link=None)` - Count mappings
-- `search_databases(name)` - Search databases by name
-- `search_id(id_string)` - Search databases by ID pattern
-- `lookup_id(id_string)` - Lookup which tables contain an ID
-- `route(src, dst, max_hops=3)` - Find routes between databases
-- `config_dataset(name=None)` - Get dataset configuration
-- `config_relation(src=None, dst=None)` - Get relation configuration
-- `config_descriptions()` - Get database descriptions
-- `config_statistics()` - Get database statistics
-- `config_taxonomy()` - Get taxonomy list
-
-### LabelConverter
-
-Main class for converting biological labels to database IDs. The upstream API is selected from the dataset configuration.
-
-**Methods:**
-- `convert(labels, dataset, label_types=None, tags=None, threshold=0.5, preferred_dictionary=None, taxonomy=None, format='json')` - Convert labels to IDs (auto-selects API based on dataset config)
-- `convert_pubdictionaries(labels, dictionaries, tags=None, threshold=0.5, preferred_dictionary=None)` - Convert using PubDictionaries API
-- `convert_sparqlist(labels, sparqlist, label_types, taxonomy=None)` - Convert using SPARQList API
-
-**API selection:**
-- The dataset's `label_resolver` configuration is fetched from the TogoID API
-  (`/config/dataset`) and decides which upstream to use — it is not inferred from
-  the labels themselves.
-- `label_resolver.sparqlist` present → SPARQList (e.g. `ncbigene`)
-- otherwise → PubDictionaries (e.g. `chebi`, `mondo`)
-
-### AnnotationsConverter
-
-Main class for getting annotations and labels for IDs.
-
-**Methods:**
-- `list_fields(dataset_name)` - List available annotation fields
-- `execute_query(dataset_name, ids, fields, filters)` - Execute GraphQL query to get annotations
-- `build_rows(dataset_label, fields, field_meta, records, filters, compact)` - Build table rows from query results
-
-## CLI Command Reference
-
-### Basic Commands
-
-```bash
-# Convert IDs between databases
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
-
-# Label to ID conversion
-togoid label2id --labels "BRCA1,TP53" --dataset ncbigene --taxonomy 9606
-
-# Get annotations
-togoid annotate --dataset ncbigene --ids 672,7157 --field label --field gene_synonym
-togoid annotate --dataset ncbigene --list-fields
-
-# Utilities
-togoid count ncbigene ensembl_gene --ids 1,9
-
-# Configuration
-togoid config dataset ncbigene
-togoid config descriptions
-```
-
-### Advanced Features
-
-#### ID Conversion with Annotations
-
-Add annotation columns to your conversion results:
-
-```bash
-# Add single annotation
-togoid convert --ids 1,9 \
-  --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --annotate ncbigene label
-
-# Add multiple annotations
-togoid convert --ids 1,9 \
-  --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --annotate ncbigene label \
-  --annotate ncbigene full_name \
-  --annotate ensembl_transcript transcript_flag
-```
-
-#### ID Conversion with Filtering
-
-Filter results by annotation values with `--filter DATASET FIELD=VALUES`
-(multiple values are comma-separated; `annotate` uses the same `FIELD=VALUES`
-form without the dataset):
-
-```bash
-# Filter by single value
-togoid convert --ids 1,9 \
-  --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --filter ensembl_transcript transcript_flag="MANE Select"
-
-# Combine annotations and filtering
-togoid convert --ids 1,9 \
-  --route ncbigene,ensembl_gene,ensembl_transcript \
-  --format table \
-  --annotate ncbigene label \
-  --filter ensembl_transcript transcript_flag="MANE Select"
-```
-
-#### Ortholog Retrieval
-
-Get orthologs using round-trip conversion:
-
-```bash
-# Get mouse and rat orthologs for human genes
-togoid get-ortholog \
-  --ids 672,7157 \
-  --route ncbigene,homologene \
-  --target-taxids 10090,10116 \
-  --format table
-
-# Output as JSON
-togoid get-ortholog \
-  --ids 672,7157 \
-  --route ncbigene,homologene \
-  --target-taxids 10090 \
-  --format json
-```
-
-Table output columns are `[source_id, homologene_id, target_id, taxonomy_id]`.
-
-### Input/Output Options
+## Command-Line Usage
 
 Conventions shared by all subcommands:
 
 - Lists given on the command line (`--ids`, `--labels`, `--route`, ...) are comma-separated.
 - List files (`--ids-file`, `--labels-file`, `--genes-file`) hold one entry per line; pass `-` to read from stdin.
 - Short options: `-i` (list file), `-o` (`--output`), `-f` (`--format`), `-d` (`--dataset`), `-r` (`--route`).
+- Run `togoid <command> --help` for the full list of options.
+
+### convert
 
 ```bash
-# Read IDs from file (one ID per line; also available for count and get-ortholog)
-printf "1\n9\n672\n" > ids.txt
-togoid convert --ids-file ids.txt --route ncbigene,ensembl_gene
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format csv --output results.csv
 
-# Read IDs from stdin, using short options
+# IDs from stdin, with short options
 cut -f1 genes.tsv | togoid convert -i - -r ncbigene,ensembl_gene -f table -o result.tsv
 
-# Save output to file
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --output result.json
-
-# Different output formats
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format json
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format dict
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format table
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --format csv
+# Annotations and filtering (--filter DATASET FIELD=VALUE1,VALUE2)
+togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript \
+  --format table \
+  --annotate ncbigene label \
+  --annotate ncbigene full_name \
+  --filter ensembl_transcript transcript_flag="MANE Select"
 ```
 
-### Report Options
+Formats: `json` (default), `csv`, `tsv`, `dict`, `table`, `dataframe`.
+`--report` selects what is returned: `target` (default, target IDs only),
+`pair` (source-target pairs) or `full` (every ID along the route).
+Routes of three or more datasets, and any use of `--annotate`/`--filter`,
+always use `full`. `--limit` and `--offset` page through large results.
 
-Control what information is returned:
+### get-ortholog
 
 ```bash
-# Only target IDs (default)
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report target
-
-# Source-target pairs
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene --report pair
-
-# Full path including intermediate IDs
-togoid convert --ids 1,9 --route ncbigene,ensembl_gene,ensembl_transcript --report full
+togoid get-ortholog --ids 672,7157 \
+  --route ncbigene,homologene \
+  --target-taxids 10090,10116
 ```
 
-**Note:** When using routes with 3+ datasets or annotations, the library automatically uses `report=full` to include all intermediate IDs.
+Output defaults to a table with columns `[source_id, homologene_id, target_id, taxonomy_id]`.
 
-### Finding Reachable Datasets
-
-Get a list of datasets that are reachable from a source dataset in one hop:
+### label2id
 
 ```bash
-# CLI
+togoid label2id --dataset ncbigene --labels "BRCA1,TP53,EGFR" --taxonomy 9606
+togoid label2id --dataset chebi --labels caffeine --label-types togoid_chebi_label
+togoid label2id --dataset mondo --labels "breast cancer" --threshold 0.5
+
+# From a file (one label per line; commas are kept as part of the label)
+togoid label2id --dataset ncbigene --labels-file genes.txt --taxonomy 9606 --format csv --output results.csv
+```
+
+### annotate
+
+```bash
+togoid annotate --dataset ncbigene --list-fields
+
+togoid annotate --dataset ncbigene --ids 672,7157 \
+  --field type_of_gene --field gene_synonym \
+  --filter type_of_gene=protein-coding
+
+togoid annotate --dataset ncbigene --ids-file gene_ids.txt --field gene_synonym --format csv --output genes.csv
+```
+
+### Exploring Datasets and Routes
+
+```bash
+togoid search databases uniprot
+togoid search id NM_001110
+togoid lookup id 672
+togoid route ncbigene uniprot --max-hops 3
+togoid count ncbigene ensembl_gene --ids 1,9
+
+togoid config dataset ncbigene
+togoid config relation ncbigene ensembl_gene
 togoid config list-targets ncbigene
-
-# Python
-converter = TogoIDConverter()
-targets = converter.config_list_targets("ncbigene")
-print(targets)  # ['ensembl_gene', 'hgnc', 'mgi', ...]
+togoid config descriptions
+togoid config statistics
+togoid config taxonomy
 ```
+
+## Notes
+
+### ID Prefixes (CURIE format)
+
+The TogoID API can format converted IDs with their dataset prefix (CURIE), e.g.
+`0005634` → `GO:0005634`, `217124` → `ORPHA:217124`. This is the **default**
+output of `convert()`. Pass `prefix=False` (CLI: `--raw`) to get raw IDs:
+
+```python
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full")
+# [['ORPHA:217124', 'P23284', 'GO:0005737'], ...]
+
+converter.convert(route=["orphanet_gene", "uniprot", "go"], ids=["217124"], report="full", prefix=False)
+# [['217124', 'P23284', '0005737'], ...]
+```
+
+- Prefixing requires the server-side `?prefix` support ([togoid-api PR #149](https://github.com/togoid/togoid-api/pull/149)).
+  Against API deployments that predate it, output is raw regardless of `prefix`.
+- `annotate` / `filter` and `get_ortholog` transparently handle prefixed IDs: the
+  library matches on the raw local ID internally, so joins keep working while the
+  displayed IDs stay prefixed.
+- `label2id` (`LabelConverter`) returns raw identifiers: it resolves labels via
+  PubDictionaries / SPARQList, which are not covered by the API's `?prefix`.
 
 ### Route Suggestions
 
-When datasets are not directly connected, the library automatically suggests alternative routes:
+When two adjacent datasets in a route are not directly connected, the error
+message suggests alternative routes:
 
-```python
-# If ncbigene → chembl_compound isn't directly connected
-converter.convert(ids=["1"], route=["ncbigene", "chembl_compound"])
+```
+RuntimeError: No direct connection between 'ncbigene' and 'chembl_compound'.
 
-# Error message will suggest alternatives:
-# RuntimeError: No direct connection between 'ncbigene' and 'chembl_compound'.
-#
-# Suggested routes (2 hops):
-# - ncbigene → ensembl_gene → chembl_compound
-# - ncbigene → uniprot → chembl_compound
-#
-# Suggested routes (3 hops):
-# - ncbigene → ensembl_gene → pdb → chembl_compound
+Suggested routes (2 hops):
+- ncbigene → ensembl_gene → chembl_compound
+- ncbigene → uniprot → chembl_compound
+...
 ```
 
-## Configuration
+### API Endpoints
 
-### Environment Variables
-
-- `TOGOID_API_ENDPOINT` - TogoID API base URL (default: https://api.togoid.dbcls.jp)
-- `TOGOID_GRASP_ENDPOINT` - GRASP GraphQL endpoint (default: https://dx.dbcls.jp/grasp-dev-togoid)
-
-### Custom API Endpoints
+- `TOGOID_API_ENDPOINT`: TogoID API base URL (default: https://api.togoid.dbcls.jp)
+- `TOGOID_GRASP_ENDPOINT`: GRASP GraphQL endpoint used for annotations (default: https://dx.dbcls.jp/grasp-dev-togoid)
 
 ```python
-# Python
 converter = TogoIDConverter(api_base_url="http://localhost:5000")
+```
 
-# CLI
+```bash
 togoid --api-url http://localhost:5000 convert --ids 1,9 --route ncbigene,ensembl_gene
 ```
+
+### Breaking Changes
+
+See [CHANGELOG.md](CHANGELOG.md) for breaking changes between versions.
+
+## Examples
+
+### Enrichment Analysis for scRNA-seq
+
+An example of building on TogoID: a conversion route that ends in an annotation
+dataset (e.g. `ncbigene → uniprot → reactome_pathway`) is used as a gene-set
+library for over-representation analysis of single-cell clusters, with the
+results drawn on a UMAP.
+
+> **Note:** This is an experimental, illustrative extension, not part of TogoID's
+> core functionality. It ships as `togoid.enrichment` and the `togoid enrich`
+> command, but its API may change.
+
+- [examples/scRNAseq_enrichment/](examples/scRNAseq_enrichment/): a runnable pipeline on real data
+- [docs/enrichment.md](docs/enrichment.md): the `togoid.enrichment` module, the `togoid enrich` command and the extras they need
 
 ## Requirements
 
 - Python 3.7+
 - requests >= 2.20.0
-- pandas >= 1.0.0 (optional, for DataFrame format and `togoid[enrichment]`)
-- matplotlib >= 3.5 (optional, for the UMAP figures; `togoid[plot]`)
-- scanpy >= 1.9 and leidenalg >= 0.9 (optional, for the scRNA-seq example;
-  `togoid[singlecell]`)
-
-The enrichment analysis itself runs on a bare install: the hypergeometric test
-and the BH-FDR correction use only the standard library.
+- Optional: pandas >= 1.0.0 (for `format="dataframe"`)
 
 ## Testing
 
-This package includes comprehensive test scripts to verify all functionality:
-
 ```bash
-# Test Python library examples
-python3 tests/test_readme_examples.py
-
-# Test CLI examples
-bash tests/test_cli_examples.sh
-
-# Test the enrichment analysis (no network access required)
-python3 tests/test_enrichment.py
-
-# Test the enrichment analysis against the live TogoID API
-python3 tests/test_enrichment_api.py
+python3 tests/test_readme_examples.py   # Python library examples
+bash tests/test_cli_examples.sh         # CLI examples
+python3 tests/test_enrichment.py        # Enrichment example (no network access required)
+python3 tests/test_enrichment_api.py    # Enrichment example against the live TogoID API
 ```
 
 See [TESTING.md](TESTING.md) for what each script covers.

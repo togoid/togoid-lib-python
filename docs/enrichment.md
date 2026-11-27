@@ -6,6 +6,9 @@ every term reached by the route becomes a set containing the input genes that
 map to it. From there it is a standard over-representation analysis, and the
 results can be drawn straight onto a single-cell embedding.
 
+> **Note:** `togoid.enrichment` is an experimental, illustrative extension built
+> on TogoID, not part of TogoID's core functionality. Its API may change.
+
 - [Why routes make gene sets](#why-routes-make-gene-sets)
 - [Installation](#installation)
 - [Quick start](#quick-start)

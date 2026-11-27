@@ -4,6 +4,9 @@ A complete worked example: cluster a single-cell RNA-seq dataset, convert each
 cluster's marker genes with TogoID, test them for enrichment, and draw the
 result on the UMAP embedding.
 
+> **Note:** `togoid.enrichment` is an experimental, illustrative extension built
+> on TogoID, not part of TogoID's core functionality. Its API may change.
+
 The point of the example is step 3. One call takes gene symbols all the way to
 an annotation database, and the *only* thing that changes between Reactome, GO
 and MONDO is the route:
